@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { NodeSqliteWrapper, SQLiteSyncStorage, TLSocketRoom } from '@tldraw/sync-core'
 import type { TLRecord } from '@tldraw/tlschema'
 import { DATA_DIR } from './config.ts'
+import { schema } from './mediaCard.ts'
 
 export type CanvasRoom = TLSocketRoom<TLRecord, void>
 
@@ -11,7 +12,7 @@ export type CanvasRoom = TLSocketRoom<TLRecord, void>
 const db = new DatabaseSync(join(DATA_DIR, 'canvas.db'))
 const storage = new SQLiteSyncStorage<TLRecord>({ sql: new NodeSqliteWrapper(db) })
 
-export const room: CanvasRoom = new TLSocketRoom<TLRecord, void>({ storage })
+export const room: CanvasRoom = new TLSocketRoom<TLRecord, void>({ storage, schema })
 
 export function closeRoom() {
 	room.close()

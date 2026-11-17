@@ -4,7 +4,6 @@ import type { TLSyncStorageTransaction } from '@tldraw/sync-core'
 import {
 	createBindingId,
 	createShapeId,
-	createTLSchema,
 	toRichText,
 	type TLArrowBinding,
 	type TLAsset,
@@ -17,6 +16,7 @@ import {
 import { getIndexAbove, type IndexKey } from '@tldraw/utils'
 import { z } from 'zod'
 import { safeId, UPLOADS } from './config.ts'
+import { CAPTION_H, MEDIA_CARD, schema } from './mediaCard.ts'
 import { sniffMedia } from './media.ts'
 import { DIAGRAM_GAP, DRAW_M, findFreeRect, GAP, overlaps, segmentHitsRect, sidesOf, textBlockHeight, type Point, type Rect } from './layout.ts'
 import { room } from './room.ts'
@@ -84,11 +84,11 @@ export type ShapePatch = z.infer<typeof ShapePatch>
 // ---- Conventions stored in shape.meta ---------------------------------------------------------
 //
 // author   'agent' on everything the agent made. Shapes without it belong to the user.
-// kind     'annotation'   a user note aimed at the canvas or at specific shapes (targetIds)
-//          'agent-reply'  an agent text block answering an annotation (replyTo)
+// kind     'mark'   a user note aimed at the canvas or at specific shapes (targetIds)
+//          'agent-reply'  an agent text block answering a mark (replyTo)
 //          'agent-note'   an agent text block that is not an answer
 //          'link'         an arrow that only connects a reply to what it answers
-// status   annotations only: 'open' | 'answered'
+// status   marks only: 'open' | 'answered'
 
 interface BlockMeta {
 	author?: string
@@ -101,8 +101,6 @@ interface BlockMeta {
 const metaOf = (s: TLShape) => s.meta as BlockMeta
 
 // ---- Helpers ---------------------------------------------------------------------------------
-
-const schema = createTLSchema()
 
 function normShapeId(id: string) {
 	return id.startsWith('shape:') ? (id as TLShape['id']) : createShapeId(id)
@@ -135,6 +133,11 @@ interface LooseProps {
 	color?: string
 	richText?: TLRichText
 	assetId?: string | null
+	kind?: string
+	src?: string
+	mimeType?: string
+	name?: string
+	caption?: string
 	autoSize?: boolean
 }
 const propsOf = (s: TLShape) => s.props as unknown as LooseProps
@@ -168,6 +171,7 @@ function sizeOf(shape: TLShape): { w: number; h: number } {
 		const grown = (200 + (p.growY ?? 0)) * scale
 		return { w: 200 * scale, h: Math.max(grown, textBlockHeight(textOf(shape), 200 * scale, DRAW_M)) }
 	}
+	if (shape.type === MEDIA_CARD) return { w: p.w ?? 0, h: (p.h ?? 0) + CAPTION_H }
 	if (shape.type === 'text' && typeof p.w === 'number') return { w: p.w, h: textBlockHeight(textOf(shape), p.w) }
 	if (typeof p.w === 'number') return { w: p.w, h: (p.h ?? 0) + (p.growY ?? 0) }
 	return { w: 0, h: 0 }
@@ -209,9 +213,13 @@ function describeOne(s: TLShape, records: TLRecord[], byId: Map<string, TLRecord
 	if (text) out.text = text
 	if (p.color) out.color = p.color
 	if (m.kind) out.kind = m.kind
-	if (m.kind === 'annotation') Object.assign(out, { status: m.status ?? 'open', targetIds: m.targetIds ?? [] })
+	if (m.kind === 'mark') Object.assign(out, { status: m.status ?? 'open', targetIds: m.targetIds ?? [] })
 	if (m.replyTo) out.replyTo = m.replyTo
-	if (s.type === 'image' || s.type === 'video') {
+	if (s.type === MEDIA_CARD) {
+		out.type = 'media'
+		if (p.caption) out.text = p.caption
+		out.media = { kind: p.kind, name: p.name, mimeType: p.mimeType, src: p.src, ...(p.kind === 'image' ? { seeWith: 'view_image' } : {}) }
+	} else if (s.type === 'image' || s.type === 'video') {
 		const asset = p.assetId ? (byId.get(p.assetId) as TLAsset | undefined) : undefined
 		const props = asset && (asset.type === 'image' || asset.type === 'video') ? asset.props : undefined
 		out.media = { kind: s.type, name: props?.name, mimeType: props?.mimeType, ...(s.type === 'image' ? { seeWith: 'view_image' } : {}) }
@@ -239,10 +247,30 @@ export function describeShapes(shapeIds?: string[], pageId?: string) {
 		.map((s) => describeOne(s, records, byId, bindings))
 }
 
+// Shape count per page, so the agent can see where things are without reading every shape.
+export function pageCounts(): Record<string, number> {
+	const records = readAll()
+	const byId = new Map(records.map((r) => [r.id as string, r]))
+	const counts: Record<string, number> = {}
+	for (const s of records.filter(isShape)) {
+		const pid = pageOf(s, byId)
+		if (pid && s.type !== 'arrow') counts[pid] = (counts[pid] ?? 0) + 1
+	}
+	return counts
+}
+
 export function listPages() {
 	return readAll()
 		.filter(isPage)
 		.map((p) => ({ id: p.id as string, name: p.name }))
+}
+
+// Every shape and binding id in the document. A browser tab must have all of them before it can render what the
+// agent just wrote: sync is asynchronous, so the server returns before the tab has caught up.
+export function syncIds(): string[] {
+	return readAll()
+		.filter((r) => isShape(r) || isBinding(r))
+		.map((r) => r.id as string)
 }
 
 // Where content already is, so the agent can reason about free space.
@@ -262,15 +290,15 @@ export function contentBounds(pageId?: string) {
 	return { x: Math.round(x1), y: Math.round(y1), w: Math.round(x2 - x1), h: Math.round(y2 - y1) }
 }
 
-// ---- Annotations -----------------------------------------------------------------------------
+// ---- Marks -----------------------------------------------------------------------------
 
-export function listAnnotations(status: 'open' | 'answered' | 'all' = 'open') {
+export function listMarks(status: 'open' | 'answered' | 'all' = 'open') {
 	const records = readAll()
 	const byId = new Map(records.map((r) => [r.id as string, r]))
 	const bindings = records.filter(isArrowBinding)
 	return records
 		.filter(isShape)
-		.filter((s) => metaOf(s).kind === 'annotation')
+		.filter((s) => metaOf(s).kind === 'mark')
 		.filter((s) => textOf(s).trim() !== '') // an empty note is a draft the user has not written yet
 		.filter((s) => status === 'all' || (metaOf(s).status ?? 'open') === status)
 		.map((s) => {
@@ -310,7 +338,7 @@ export function createPage(name: string) {
 	}).result
 }
 
-function resolvePageId(requested?: string): string {
+export function resolvePageId(requested?: string): string {
 	const pages = listPages()
 	if (requested) {
 		if (!pages.some((p) => p.id === requested)) throw new Error(`Unknown page ${requested}`)
@@ -426,7 +454,7 @@ function buildShape(
 				color,
 				fill: 'none',
 				dash: 'draw',
-				size: input.route === 'curve' ? 's' : 'm',
+				size: 'm',
 				arrowheadStart: 'none',
 				arrowheadEnd: 'arrow',
 				font: 'draw',
@@ -556,7 +584,7 @@ function addLink(txn: Txn, from: TLShape, to: TLShape, c: Common): TLShape {
 	return arrow
 }
 
-export function createShapes(inputs: ShapeInput[], pageIdHint?: string) {
+export function createShapes(inputs: ShapeInput[], pageIdHint?: string, replace = false) {
 	const pageId = resolvePageId(pageIdHint)
 	return room.storage.transaction((txn) => {
 		const all = Array.from(txn.values())
@@ -595,7 +623,7 @@ export function createShapes(inputs: ShapeInput[], pageIdHint?: string) {
 		nonArrows.forEach(visit)
 		// Arrows last, so they can reference shapes created in the same call.
 		const ordered = [...order, ...inputs.filter((i) => i.type === 'arrow')]
-		const result: { id: string; x?: number; y?: number; placed?: boolean }[] = []
+		const result: { id: string; x?: number; y?: number; w?: number; h?: number; placed?: boolean }[] = []
 		const warnings: string[] = []
 
 		for (const input of ordered) {
@@ -634,11 +662,17 @@ export function createShapes(inputs: ShapeInput[], pageIdHint?: string) {
 			}
 
 			const shape = validated(buildShape(spec, { pageId, index, meta: { author: 'agent' } }, { w, h }, lookup))
-			if (txn.get(shape.id)) throw new Error(`Shape id ${shape.id} already exists`)
+			if (txn.get(shape.id)) {
+				if (!replace) {
+					throw new Error(`Shape id ${shape.id} already exists. Use update_shapes to change it, or pass replace: true to recreate it.`)
+				}
+				// Re-creating keeps other arrows attached (same id); only this shape's own arrow ends are rebuilt.
+				for (const r of Array.from(txn.values())) if (isBinding(r) && r.fromId === shape.id) txn.delete(r.id)
+			}
 			txn.set(shape.id, shape)
 			created.set(shape.id, shape)
 			if (!isArrow) rects.set(shape.id, { x: spec.x!, y: spec.y!, w, h })
-			result.push(isArrow ? { id: shape.id } : { id: shape.id, x: spec.x, y: spec.y, placed })
+			result.push(isArrow ? { id: shape.id } : { id: shape.id, x: spec.x, y: spec.y, w, h, placed })
 
 			if (isArrow) {
 				const from = input.from ? lookup(normShapeId(input.from)) : undefined
@@ -647,7 +681,7 @@ export function createShapes(inputs: ShapeInput[], pageIdHint?: string) {
 				warnings.push(...arrowWarnings(input, shape.id, from, to, rects))
 			}
 		}
-		return { created: result, warnings }
+		return { pageId, created: result, warnings }
 	}).result
 }
 
@@ -703,10 +737,17 @@ export function updateShapes(patches: ShapePatch[]) {
 			if (!shape) throw new Error(`Unknown shape ${patch.id}`)
 			const props: Record<string, unknown> = { ...shape.props }
 			if (patch.text !== undefined && 'richText' in props) props.richText = toRichText(patch.text)
+			if (patch.text !== undefined && shape.type === MEDIA_CARD) props.caption = patch.text
 			if (patch.color) props.color = patch.color
 			if (patch.fill && 'fill' in props) props.fill = patch.fill
 			if (patch.w !== undefined && 'w' in props) props.w = patch.w
 			if (patch.h !== undefined && 'h' in props) props.h = patch.h
+			// Resizing a picture by one side keeps its proportions, otherwise it is stretched.
+			if (shape.type === 'image' || shape.type === 'video' || shape.type === MEDIA_CARD) {
+				const old = propsOf(shape)
+				if (patch.w !== undefined && patch.h === undefined && old.w && old.h) props.h = Math.round((patch.w * old.h) / old.w)
+				if (patch.h !== undefined && patch.w === undefined && old.w && old.h) props.w = Math.round((patch.h * old.w) / old.h)
+			}
 			const next = validated({
 				...shape,
 				x: patch.x ?? shape.x,
@@ -736,7 +777,7 @@ export function deleteShapes(ids: string[]) {
 	}).result
 }
 
-// ---- Agent text blocks and annotation answers ---------------------------------------------------
+// ---- Agent text blocks and mark answers ---------------------------------------------------
 
 const BLOCK_WIDTH = 360
 
@@ -751,7 +792,7 @@ export function addTextBlock(opts: { text: string; near?: string; w?: number; x?
 		const h = Math.max(60, textBlockHeight(opts.text, w))
 		const anchorRect = anchor && rectOf(anchor)
 		const spot = findFreeRect(obstacles, w, h, {
-			prefer: anchorRect ? sidesOf(anchorRect, w, h) : [],
+			prefer: anchorRect ? sidesOf(anchorRect, w, h, DIAGRAM_GAP) : [],
 			fallback: opts.x !== undefined && opts.y !== undefined ? { x: opts.x, y: opts.y } : viewportCorner(pageId),
 		})
 		const c: Common = {
@@ -766,17 +807,17 @@ export function addTextBlock(opts: { text: string; near?: string; w?: number; x?
 	}).result
 }
 
-function getAnnotation(txn: Txn, id: string): TLShape {
+function getMark(txn: Txn, id: string): TLShape {
 	const ann = txn.get(normShapeId(id))
-	if (!ann || !isShape(ann) || metaOf(ann).kind !== 'annotation') throw new Error(`${id} is not an annotation`)
+	if (!ann || !isShape(ann) || metaOf(ann).kind !== 'mark') throw new Error(`${id} is not a mark`)
 	return ann
 }
 
-// Answering = writing a reply block beside the annotation AND flipping its status. Doing both here, in one
+// Answering = writing a reply block beside the mark AND flipping its status. Doing both here, in one
 // transaction, is what makes "is it answered?" reliable.
-export function replyToAnnotation(id: string, text: string) {
+export function replyToMark(id: string, text: string) {
 	return room.storage.transaction((txn) => {
-		const ann = getAnnotation(txn, id)
+		const ann = getMark(txn, id)
 		const all = Array.from(txn.values())
 		const pageId = ann.parentId as string
 		const obstacles = obstaclesOn(all, pageId)
@@ -784,7 +825,7 @@ export function replyToAnnotation(id: string, text: string) {
 		const h = Math.max(60, textBlockHeight(text, w))
 		const annRect = rectOf(ann)!
 		// A reply reads best directly under the note it answers, so try below before right.
-		const [right, under, left, above] = sidesOf(annRect, w, h) as [Point, Point, Point, Point]
+		const [right, under, left, above] = sidesOf(annRect, w, h, DIAGRAM_GAP) as [Point, Point, Point, Point]
 		const spot = findFreeRect(obstacles, w, h, { prefer: [under, right, left, above], fallback: under })
 		const index = getIndexAbove(topIndex(all, pageId))
 		const block = buildAgentBlock(text, spot, {
@@ -799,10 +840,10 @@ export function replyToAnnotation(id: string, text: string) {
 	}).result
 }
 
-// Closing an annotation without writing anything (e.g. the request was just done on the canvas).
-export function resolveAnnotation(id: string) {
+// Closing a mark without writing anything (e.g. the request was just done on the canvas).
+export function resolveMark(id: string) {
 	return room.storage.transaction((txn) => {
-		const ann = getAnnotation(txn, id)
+		const ann = getMark(txn, id)
 		txn.set(ann.id, { ...ann, opacity: 0.55, meta: { ...ann.meta, status: 'answered' } })
 		return ann.id as string
 	}).result
@@ -813,24 +854,30 @@ export function resolveAnnotation(id: string) {
 const MAX_VIEW_BYTES = 8 * 1024 * 1024
 
 interface StoredMedia {
-	shape: TLShape
-	asset: TLAsset & { type: 'image' | 'video' }
+	kind: 'image' | 'video'
+	name: string
+	mimeType: string | null
 	file: string
 }
+
+const fileFromSrc = (src: string) => safeId(decodeURIComponent(new URL(src, 'http://local').pathname.split('/').pop() ?? ''))
 
 function findMedia(shapeId: string): StoredMedia {
 	const records = readAll()
 	const shape = records.find((r) => r.id === normShapeId(shapeId))
-	if (!shape || !isShape(shape) || (shape.type !== 'image' && shape.type !== 'video')) {
-		throw new Error(`${shapeId} is not an image or video shape`)
+	if (!shape || !isShape(shape)) throw new Error(`${shapeId} is not a media shape`)
+	const p = propsOf(shape)
+	if (shape.type === MEDIA_CARD && p.src) {
+		return { kind: p.kind as StoredMedia['kind'], name: p.name ?? '', mimeType: p.mimeType ?? null, file: fileFromSrc(p.src) }
 	}
-	const assetId = propsOf(shape).assetId
-	const asset = assetId ? (records.find((r) => r.id === assetId) as TLAsset | undefined) : undefined
-	if (!asset || (asset.type !== 'image' && asset.type !== 'video') || !asset.props.src) {
-		throw new Error(`${shapeId} has no stored file`)
+	// Images placed before media cards existed use a tldraw asset record.
+	if (shape.type === 'image' || shape.type === 'video') {
+		const asset = p.assetId ? (records.find((r) => r.id === p.assetId) as TLAsset | undefined) : undefined
+		if (asset && (asset.type === 'image' || asset.type === 'video') && asset.props.src) {
+			return { kind: asset.type, name: asset.props.name, mimeType: asset.props.mimeType, file: fileFromSrc(asset.props.src) }
+		}
 	}
-	const file = safeId(decodeURIComponent(new URL(asset.props.src, 'http://local').pathname.split('/').pop() ?? ''))
-	return { shape, asset: asset as StoredMedia['asset'], file }
+	throw new Error(`${shapeId} is not an image or video, or has no stored file`)
 }
 
 export interface ViewedImage {
@@ -840,17 +887,13 @@ export interface ViewedImage {
 }
 
 export function readImage(shapeId: string): ViewedImage {
-	const { asset, file } = findMedia(shapeId)
-	if (asset.type === 'video') throw new Error(`${shapeId} is a video (${asset.props.name}); only images can be viewed`)
-	const data = readFileSync(join(UPLOADS, file))
+	const media = findMedia(shapeId)
+	if (media.kind === 'video') throw new Error(`${shapeId} is a video (${media.name}); only images can be viewed`)
+	const data = readFileSync(join(UPLOADS, media.file))
 	if (data.length > MAX_VIEW_BYTES) {
 		throw new Error(`Image is ${(data.length / 1048576).toFixed(1)} MB, over the ${MAX_VIEW_BYTES / 1048576} MB view limit`)
 	}
-	return {
-		base64: data.toString('base64'),
-		mimeType: sniffMedia(data)?.mimeType ?? asset.props.mimeType ?? 'image/png',
-		name: asset.props.name,
-	}
+	return { base64: data.toString('base64'), mimeType: sniffMedia(data)?.mimeType ?? media.mimeType ?? 'image/png', name: media.name }
 }
 
 export interface AddMediaOptions {
@@ -873,6 +916,8 @@ export interface AddedMedia {
 	y: number
 	w: number
 	h: number
+	/** Path the file is served from, e.g. /uploads/<uuid>-name.png */
+	src: string
 	note?: string
 }
 
@@ -897,59 +942,30 @@ export function addMedia(opts: AddMediaOptions): AddedMedia {
 		const obstacles = obstaclesOn(all, pageId)
 		const w = opts.w ?? Math.min(srcW, 480)
 		const h = opts.h ?? Math.round((w * srcH) / srcW)
-		const captionH = opts.caption ? 48 : 0
 		const anchor = opts.near ? (txn.get(normShapeId(opts.near)) as TLShape | undefined) : undefined
 		if (opts.near && !anchor) throw new Error(`Unknown shape ${opts.near}`)
-		const spot = findFreeRect(obstacles, w, h + captionH, {
-			prefer: anchor ? sidesOf(rectOf(anchor)!, w, h + captionH) : [],
+		const spot = findFreeRect(obstacles, w, h + CAPTION_H, {
+			prefer: anchor ? sidesOf(rectOf(anchor)!, w, h + CAPTION_H) : [],
 			fallback: opts.x !== undefined && opts.y !== undefined ? { x: opts.x, y: opts.y } : viewportCorner(pageId),
 		})
 
 		const src = `/uploads/${encodeURIComponent(fileId)}`
-		const assetBase = { w: srcW, h: srcH, name: opts.name, isAnimated: info.animated, mimeType: info.mimeType, src }
-		const asset = validated({
-			id: `asset:${crypto.randomUUID()}` as TLAsset['id'],
-			typeName: 'asset',
-			type: info.kind,
-			props: assetBase,
-			meta: {},
-		} as TLAsset)
-		txn.set(asset.id, asset)
-
-		let index = getIndexAbove(topIndex(all, pageId))
-		const alt = opts.caption ?? opts.name
 		const shape = validated({
 			id: createShapeId(),
 			typeName: 'shape',
-			type: info.kind,
+			type: MEDIA_CARD,
 			x: spot.x,
 			y: spot.y,
 			rotation: 0,
-			index,
-			parentId: pageId as TLShape['parentId'],
+			index: getIndexAbove(topIndex(all, pageId)),
+			parentId: pageId,
 			isLocked: false,
 			opacity: 1,
 			meta: { author: 'agent' },
-			props:
-				info.kind === 'image'
-					? { w, h, playing: true, url: '', assetId: asset.id, crop: null, flipX: false, flipY: false, altText: alt }
-					: { w, h, time: 0, playing: false, autoplay: false, url: '', assetId: asset.id, altText: alt },
-		} as TLShape)
+			props: { w, h, kind: info.kind, src, mimeType: info.mimeType, name: opts.name, caption: opts.caption ?? '' },
+		} as unknown as TLShape)
 		txn.set(shape.id, shape)
-
-		if (opts.caption) {
-			index = getIndexAbove(index)
-			const caption = validated(
-				buildShape(
-					{ type: 'text', x: spot.x, y: spot.y + h + 8, w, text: opts.caption },
-					{ pageId, index, meta: { author: 'agent', kind: 'agent-note', replyTo: shape.id } },
-					{ w, h: 40 },
-					() => undefined
-				)
-			)
-			txn.set(caption.id, caption)
-		}
-		return { id: shape.id as string, kind: info.kind, mimeType: info.mimeType, x: Math.round(spot.x), y: Math.round(spot.y), w, h, note }
+		return { id: shape.id as string, kind: info.kind, mimeType: info.mimeType, x: Math.round(spot.x), y: Math.round(spot.y), w, h, src, note }
 	}).result
 }
 
@@ -983,4 +999,13 @@ export function changesSince(sinceClock: number): CanvasChanges {
 		.map((s) => describeOne(s, records, byId, bindings))
 	const deleted = result.diff.deletes.filter((id) => id.startsWith('shape:'))
 	return { clock, reloadAll: result.wipeAll, changed, deleted }
+}
+
+// Marks were called annotations before; rewrite stored shapes so existing boards keep working.
+export function migrateLegacyMarks() {
+	room.storage.transaction((txn) => {
+		for (const r of Array.from(txn.values())) {
+			if (isShape(r) && (r.meta as BlockMeta).kind === 'annotation') txn.set(r.id, { ...r, meta: { ...r.meta, kind: 'mark' } })
+		}
+	})
 }

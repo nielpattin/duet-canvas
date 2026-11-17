@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { basename } from 'node:path'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
+import { askBrowser, parseJsonReply } from './bridge.ts'
 import { room } from './room.ts'
 import {
 	addMedia,
@@ -13,54 +14,60 @@ import {
 	createShapes,
 	deleteShapes,
 	describeShapes,
-	listAnnotations,
+	listMarks,
 	listPages,
+	pageCounts,
 	readImage,
-	replyToAnnotation,
-	resolveAnnotation,
+	replyToMark,
+	resolveMark,
+	resolvePageId,
 	ShapeInput,
 	ShapePatch,
 	updateShapes,
 } from './shapes.ts'
 import { getUiContext } from './uiContext.ts'
 
-const INSTRUCTIONS = `
+const instructionsFor = (origin: string) => `
 This server is a shared infinite whiteboard (a tldraw canvas) that the user has open in their browser. You and the
 user both draw on it. It is saved on the server, so you can read and edit it even when the browser is closed.
 Coordinates are page pixels, x grows right, y grows down. Shape ids look like "shape:abc".
 
 PAGES
-- The canvas has pages. Every shape and annotation says its pageId and pageName. get_context tells you which page the
-  user is on (currentPage); new content goes there unless you pass pageId. create_page adds a page; you cannot switch
-  the user's view, so say where you put things.
+- The canvas has pages. Every shape and mark says its pageId and pageName. get_context tells you which page the
+  user is on (currentPage); new content goes there unless you pass pageId. create_page adds a page. You cannot move the user's view: say which page and where you put things.
 
 WHO WROTE WHAT
 - Everything you create is stamped author "agent". Shapes with author "user" are the user's.
-- Your text blocks are violet, sans-serif boxes (add_text_block / reply_to_annotation). Never write plain text
+- Your text blocks are violet, sans-serif boxes (add_text_block / reply_to_mark). Never write plain text
   shapes for prose; use those tools so the user can tell your words from theirs.
 
-ANNOTATIONS (how the user talks to you)
-- An annotation is a pink handwritten note the user adds with the "Annotate" button. It can be attached to shapes
+MARKS (how the user talks to you)
+- A mark is a pink handwritten note the user adds with the Mark tool (click a shape or block with the tool to mark it). It can be attached to shapes
   (targetIds), including your own blocks and images, or float free. Its text is the user's message.
-- Each annotation has a status: "open" (not handled) or "answered". Editing an answered annotation reopens it.
-- Workflow: call list_annotations to get the open ones, read each annotation AND its targets (the targets say what
-  "this" refers to), do what is asked, then close it with reply_to_annotation (writes your answer beside it and marks
-  it answered) or resolve_annotation (no text needed, e.g. you only changed the canvas). Never leave a handled
-  annotation open, and never touch annotations with status "answered" unless the user reopened them.
-- When the user says "this", "that" or "here" without an annotation, call get_context: it returns their current
-  selection, viewport and open annotations. It works with the browser closed too (last known state).
+- Each mark has a status: "open" (not handled) or "answered". Editing an answered mark reopens it.
+- Workflow: call list_marks to get the open ones, read each mark AND its targets (the targets say what
+  "this" refers to), do what is asked, then close it with reply_to_mark (writes your answer beside it and marks
+  it answered) or resolve_mark (no text needed, e.g. you only changed the canvas). Never leave a handled
+  mark open, and never touch marks with status "answered" unless the user reopened them.
+- list_marks is enough when you only need the marks; get_context also gives selection and viewport (its marks are a short list).
+- When the user says "this", "that" or "here" without a mark, call get_context: it returns their current
+  selection, viewport and open marks. It works with the browser closed too (last known state).
+
+SEEING THE CANVAS
+- get_canvas returns data, not a picture. To see shapes rendered, call capture with shapeIds or a bounds area. Use it when
+  you need to judge how something looks. NEVER use it to confirm a routine edit, and NEVER open a browser to check your work.
 
 MEDIA
 - get_canvas lists image and video shapes but does not show them. Call view_image with an image shape id to actually
   see it (videos cannot be viewed, only listed).
-- add_media puts a PNG, JPEG, GIF, WebP, MP4 or WebM on the canvas. Give a local file path, a URL (the server downloads
+- add_media puts a PNG, JPEG, GIF, WebP, MP4 or WebM on the canvas as a media card (picture plus caption in one shape; edit the caption with update_shapes text). Give a local file path, a URL (the server downloads
   it) or base64. Use path or url for anything big.
 
 STAYING IN SYNC (the user edits the canvas while you work)
 - Every read is live; the server never serves stale data. But you are not pushed updates between calls.
-- Every tool result ends with canvas.clock (the document version) and canvas.openAnnotations. Remember the clock from
+- Every tool result ends with canvas.clock (the document version) and canvas.openMarks. Remember the clock from
   your last call; before you edit or after a long task, call get_changes({sinceClock}) to see exactly what the user
-  added, edited, moved or deleted since, and re-check openAnnotations for new messages.
+  added, edited, moved or deleted since, and re-check openMarks for new messages.
 - Selection and viewport are not part of the document. get_context always returns the current ones.
 
 LAYOUT
@@ -75,12 +82,15 @@ LAYOUT
   close, and do not move the user's shapes unless asked.
 `.trim()
 
-// Every JSON result carries the canvas version and the open-annotation count, so the agent can notice that
+// Every JSON result carries the canvas version and the open-mark count, so the agent can notice that
 // the user changed something (or left a new message) between two calls without polling.
-const json = (value: unknown) => {
+const json = (value: unknown, nag = true) => {
 	const body = value && typeof value === 'object' && !Array.isArray(value) ? value : { result: value }
-	const canvas = { clock: currentClock(), openAnnotations: listAnnotations('open').length }
-	return { content: [{ type: 'text' as const, text: JSON.stringify({ ...body, canvas }, null, 2) }] }
+	const open = listMarks('open').length
+	const canvas = { clock: currentClock(), openMarks: open }
+	// A plain sentence is harder to overlook than a counter: the agent only learns of new marks when it looks.
+	const notice = nag && open > 0 ? { notice: `The user has ${open} open mark${open === 1 ? '' : 's'} waiting for you. Call list_marks and answer ${open === 1 ? 'it' : 'them'}.` } : {}
+	return { content: [{ type: 'text' as const, text: JSON.stringify({ ...body, ...notice, canvas }, null, 2) }] }
 }
 const failure = (e: unknown) => ({
 	isError: true,
@@ -88,9 +98,10 @@ const failure = (e: unknown) => ({
 })
 
 // Wraps a tool body so thrown errors become MCP tool errors instead of protocol errors.
-async function guard(fn: () => unknown) {
+// `nag: false` for tools that already deal with marks, where "call list_marks" would be noise.
+async function guard(fn: () => unknown, nag = true) {
 	try {
-		return json(fn())
+		return json(fn(), nag)
 	} catch (e) {
 		return failure(e)
 	}
@@ -121,14 +132,14 @@ function intersects(
 }
 
 // Stateless: a fresh server per request. All state lives in the room, not in MCP sessions.
-export function buildMcpServer() {
-	const server = new McpServer({ name: 'canvas', version: '0.3.0' }, { instructions: INSTRUCTIONS })
+export function buildMcpServer(origin: string) {
+	const server = new McpServer({ name: 'canvas', version: '0.4.0' }, { instructions: instructionsFor(origin) })
 
 	server.registerTool(
 		'get_context',
 		{
 			description:
-				'What the user is looking at and talking about: selected shapes, viewport, current page and open annotations. ' +
+				'What the user is looking at and talking about: selected shapes, viewport, current page and a short list of open marks (id, text, targetIds; use list_marks for the full target shapes). ' +
 				'Call this first when the user says "this", "that", "here" or "the selected one". ' +
 				'Works with the browser closed, returning the last known state (see tabOpen / updatedAt).',
 		},
@@ -136,61 +147,76 @@ export function buildMcpServer() {
 			guard(() => {
 				const tabOpen = room.getNumActiveSessions() > 0
 				const ui = getUiContext()
-				const openAnnotations = listAnnotations('open')
-				if (!ui) return { tabOpen, openAnnotations, note: 'The user has not opened the canvas yet.' }
+				const openMarks = listMarks('open').map((m: Record<string, unknown>) => ({
+					id: m.id,
+					text: m.text,
+					pageName: m.pageName,
+					targetIds: (m.targets as { id: unknown }[]).map((t) => t.id),
+				}))
+				if (!ui) return { tabOpen, openMarks, note: 'The user has not opened the canvas yet.' }
 				return {
 					tabOpen,
 					updatedAt: ui.updatedAt ? new Date(ui.updatedAt).toISOString() : null,
 					currentPage: listPages().find((p) => p.id === ui.currentPageId) ?? { id: ui.currentPageId },
 					viewport: ui.viewport,
 					selection: describeShapes(ui.selectedShapeIds),
-					openAnnotations,
+					openMarks,
 					shapesInViewport: describeShapes(undefined, ui.currentPageId).filter((s) => intersects(s, ui.viewport)),
 				}
-			})
+			}, false)
 	)
 
 	server.registerTool(
 		'get_canvas',
 		{
 			description:
-				'Read every shape (optionally one page): id, type, x, y, w, h, text, color, author (agent|user), kind, ' +
-				'and arrow from/to. Image shapes are listed but not shown; use view_image. contentBounds is the box around everything.',
-			inputSchema: { pageId: z.string().optional().describe('Page id like "page:page". Defaults to all pages.') },
+				'Read the shapes of ONE page (default: the page the user is on; pass pageId for another one): id, type, x, y, w, h, text, color, ' +
+				'author (agent|user), kind, and arrow from/to. `pages` lists every page with its shape count. Image shapes are listed but not ' +
+				'shown; use view_image. contentBounds is the box around the shapes returned.',
+			inputSchema: { pageId: z.string().optional().describe('Page id like "page:page". Defaults to the page the user is on.') },
 		},
 		({ pageId }) =>
-			guard(() => ({ pages: listPages(), contentBounds: contentBounds(pageId), shapes: describeShapes(undefined, pageId) }))
+			guard(() => {
+				const scope = resolvePageId(pageId)
+				const counts = pageCounts()
+				return {
+					pageId: scope,
+					pages: listPages().map((p) => ({ ...p, shapes: counts[p.id] ?? 0 })),
+					contentBounds: contentBounds(scope),
+					shapes: describeShapes(undefined, scope),
+				}
+			})
 	)
 
 	server.registerTool(
-		'list_annotations',
+		'list_marks',
 		{
 			description:
-				'The user\'s annotations (their messages to you), each with its text, status and the full description of every shape it targets. ' +
+				'The user\'s marks (their messages to you), each with its text, status and the full description of every shape it targets. ' +
 				'Defaults to open ones. Empty drafts the user has not written yet are skipped.',
 			inputSchema: { status: z.enum(['open', 'answered', 'all']).optional().describe('Default "open"') },
 		},
-		({ status }) => guard(() => ({ annotations: listAnnotations(status ?? 'open') }))
+		({ status }) => guard(() => ({ marks: listMarks(status ?? 'open') }), false)
 	)
 
 	server.registerTool(
-		'reply_to_annotation',
+		'reply_to_mark',
 		{
 			description:
-				'Answer an annotation: writes your reply as a violet agent block next to it (auto-placed, linked by an arrow) ' +
-				'and marks the annotation answered. The user can annotate your reply to continue the conversation.',
-			inputSchema: { annotationId: z.string(), text: z.string().min(1) },
+				'Answer a mark: writes your reply as a violet agent block next to it (auto-placed, linked by an arrow) ' +
+				'and marks the mark answered. The user can mark your reply to continue the conversation.',
+			inputSchema: { markId: z.string(), text: z.string().min(1) },
 		},
-		({ annotationId, text }) => guard(() => replyToAnnotation(annotationId, text))
+		({ markId, text }) => guard(() => replyToMark(markId, text), false)
 	)
 
 	server.registerTool(
-		'resolve_annotation',
+		'resolve_mark',
 		{
-			description: 'Mark an annotation answered without writing a reply (you handled it by changing the canvas).',
-			inputSchema: { annotationId: z.string() },
+			description: 'Mark a mark answered without writing a reply (you handled it by changing the canvas).',
+			inputSchema: { markId: z.string() },
 		},
-		({ annotationId }) => guard(() => ({ resolved: resolveAnnotation(annotationId) }))
+		({ markId }) => guard(() => ({ resolved: resolveMark(markId) }), false)
 	)
 
 	server.registerTool(
@@ -198,7 +224,7 @@ export function buildMcpServer() {
 		{
 			description:
 				'Write prose on the canvas as the agent (violet block, recognisably yours). Auto-placed in free space. ' +
-				'Use `near` to put it beside a shape and link it with an arrow. For answering an annotation use reply_to_annotation instead.',
+				'Use `near` to put it beside a shape and link it with an arrow. For answering a mark use reply_to_mark instead.',
 			inputSchema: {
 				text: z.string().min(1),
 				near: z.string().optional().describe('Shape id to sit beside and link to'),
@@ -228,15 +254,29 @@ export function buildMcpServer() {
 			description:
 				'Create diagram shapes (boxes, notes, arrows...). Give shapes an `id` so arrows can reference them via from/to ' +
 				'(arrows then bind and follow the shapes). Omit x/y to auto-place in free space. Geo shapes default to 160x100. ' +
-				'Shapes joined by arrows get extra room automatically. Arrow `route`: "straight" (default, tidy flows), "curve" (gentle arc, for maps and trees that fan out) or "elbow" (right angles, for loops). ' +
+				'Shapes joined by arrows get extra room automatically. Arrow `route`: "straight" (default, tidy flows), "curve" (gentle arc, for maps and trees that fan out) or "elbow" (right angles, for loops). An arrow takes `text`: that is its label, drawn on the arrow, so never make a separate text shape for a label. ' +
 				'Read the returned warnings: they flag arrows that pass through other shapes or are too short to see. ' +
 				'Everything created is marked author "agent".',
 			inputSchema: {
 				shapes: z.array(ShapeInput).min(1),
 				pageId: z.string().optional().describe('Defaults to the page the user is on'),
+				replace: z
+					.boolean()
+					.optional()
+					.describe('If a shape with the same id exists, recreate it instead of failing. Makes retried calls safe.'),
 			},
 		},
-		({ shapes, pageId }) => guard(() => createShapes(shapes, pageId))
+		({ shapes, pageId, replace }) =>
+			guard(() => {
+				const out = createShapes(shapes, pageId, replace)
+				// Page-scoped, so the agent does not need a get_canvas just to learn where things ended up.
+				return {
+					page: listPages().find((p) => p.id === out.pageId),
+					created: out.created,
+					warnings: out.warnings,
+					contentBounds: contentBounds(out.pageId),
+				}
+			})
 	)
 
 	server.registerTool(
@@ -270,6 +310,36 @@ export function buildMcpServer() {
 					content: [
 						{ type: 'text' as const, text: `${img.name} (${img.mimeType})` },
 						{ type: 'image' as const, data: img.base64, mimeType: img.mimeType },
+					],
+				}
+			} catch (e) {
+				return failure(e)
+			}
+		}
+	)
+
+	server.registerTool(
+		'capture',
+		{
+			description:
+				'Render shapes to a PNG so you can see them. Choose the shapes with `shapeIds`, or an area with `bounds` (page coordinates) ' +
+				'on `pageId`; give neither to render the whole page. Read-only: nothing on the canvas changes. The picture is capped at ' +
+				'1568px on its longest side. tldraw can only render inside a browser, so a tab must be open on the canvas app.',
+			inputSchema: {
+				shapeIds: z.array(z.string()).optional().describe('Render exactly these shapes (any page)'),
+				bounds: z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() }).optional().describe('Render the shapes inside this area of the page'),
+				pageId: z.string().optional().describe('Page for `bounds` or a whole-page render. Defaults like get_canvas.'),
+				scale: z.number().min(0.1).max(2).optional().describe('Default 1'),
+			},
+		},
+		async ({ shapeIds, bounds, pageId, scale }) => {
+			try {
+				const reply = await askBrowser({ type: 'capture', shapeIds, bounds, pageId: resolvePageId(pageId), scale })
+				if (!reply.contentType.startsWith('image/')) parseJsonReply(reply) // throws the browser's error
+				return {
+					content: [
+						{ type: 'text' as const, text: 'Rendered canvas capture.' },
+						{ type: 'image' as const, data: reply.body.toString('base64'), mimeType: 'image/png' },
 					],
 				}
 			} catch (e) {

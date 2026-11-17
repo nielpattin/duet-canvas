@@ -9,9 +9,13 @@ import { Hono } from 'hono'
 import { getMimeType } from 'hono/utils/mime'
 import { WebSocketServer } from 'ws'
 import { ALLOWED_HOSTS, HOST, PORT, safeId, UPLOADS, WEB_DIST } from './config.ts'
+import { answerFromBrowser } from './bridge.ts'
 import { buildMcpServer } from './mcp.ts'
 import { closeRoom, room } from './room.ts'
+import { migrateLegacyMarks } from './shapes.ts'
 import { setUiContext, UiContext } from './uiContext.ts'
+
+migrateLegacyMarks()
 
 const hostAllowed = (hostHeader: string | undefined) =>
 	ALLOWED_HOSTS.has((hostHeader ?? '').replace(/:\d+$/, ''))
@@ -25,7 +29,7 @@ app.use('*', async (c, next) => {
 })
 
 app.all('/mcp', async (c) => {
-	const server = buildMcpServer()
+	const server = buildMcpServer(new URL(c.req.url).origin)
 	const transport = new WebStandardStreamableHTTPServerTransport({
 		sessionIdGenerator: undefined,
 		enableJsonResponse: true,
@@ -40,6 +44,13 @@ app.post('/api/context', async (c) => {
 	if (!parsed.success) return c.json({ error: parsed.error.message }, 400)
 	setUiContext(parsed.data)
 	return c.json({ ok: true })
+})
+
+// Replies from the browser to a render job the server sent over the sync socket.
+app.post('/api/bridge/:id', async (c) => {
+	const body = Buffer.from(await c.req.arrayBuffer())
+	const ok = answerFromBrowser(c.req.param('id'), { contentType: c.req.header('content-type') ?? '', body })
+	return ok ? c.json({ ok: true }) : c.json({ error: 'unknown or expired request' }, 404)
 })
 
 app.put('/uploads/:id', async (c) => {

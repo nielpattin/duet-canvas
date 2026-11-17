@@ -1,7 +1,23 @@
 import { useSync } from '@tldraw/sync'
-import { Tldraw, type TLAssetStore, type TLComponents, useEditor, useValue, type Editor } from 'tldraw'
+import {
+	defaultShapeUtils,
+	DefaultToolbar,
+	DefaultToolbarContent,
+	Tldraw,
+	TldrawUiMenuToolItem,
+	useEditor,
+	useValue,
+	type Editor,
+	type TLAssetStore,
+	type TLComponents,
+	type TLUiOverrides,
+} from 'tldraw'
 import 'tldraw/tldraw.css'
-import { countItems, countOpenAnnotations, createAnnotation, reopenEditedAnnotations } from './annotations.ts'
+import { AgentBadges } from './AgentBadges.tsx'
+import { onBridgeMessage, setBridgeEditor } from './bridge.ts'
+import { countItems, countOpenMarks, reopenEditedMarks } from './marks.ts'
+import { MarkTool } from './MarkTool.ts'
+import { convertUserMediaToCards, MediaCardShapeUtil } from './mediaCard.tsx'
 import { pushContextToServer } from './pushContext.ts'
 
 const wsProtocol = location.protocol === 'https:' ? 'wss' : 'ws'
@@ -17,14 +33,45 @@ const assets: TLAssetStore = {
 	resolve: (asset) => asset.props.src,
 }
 
-function AnnotateButton() {
+const shapeUtils = [MediaCardShapeUtil]
+// The sync store builds its own schema, so unlike <Tldraw shapeUtils> it needs the built-in shapes listed too.
+const syncShapeUtils = [...defaultShapeUtils, MediaCardShapeUtil]
+const tools = [MarkTool]
+
+function MarkIcon() {
+	return (
+		<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#e0457b" strokeWidth="1.6" strokeLinejoin="round">
+			<path d="M8 1.5A4.5 4.5 0 0 0 3.5 6c0 3 4.5 8.5 4.5 8.5S12.5 9 12.5 6A4.5 4.5 0 0 0 8 1.5Z" />
+			<circle cx="8" cy="6" r="1.6" />
+		</svg>
+	)
+}
+
+const overrides: TLUiOverrides = {
+	tools(editor, toolsMap) {
+		toolsMap.mark = { id: 'mark', icon: <MarkIcon />, label: 'tool.mark', kbd: 'm', onSelect: () => editor.setCurrentTool('mark') }
+		return toolsMap
+	},
+	translations: { en: { 'tool.mark': 'Mark: leave the agent a note on something' } },
+}
+
+function Toolbar() {
+	return (
+		<DefaultToolbar>
+			<TldrawUiMenuToolItem toolId="mark" />
+			<DefaultToolbarContent />
+		</DefaultToolbar>
+	)
+}
+
+function CountPill() {
 	const editor = useEditor()
-	const open = useValue('open annotations', () => countOpenAnnotations(editor), [editor])
+	const open = useValue('open marks', () => countOpenMarks(editor), [editor])
 	const items = useValue('item count', () => countItems(editor), [editor])
 	return (
-		<div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: 8, pointerEvents: 'all' }}>
+		<div style={{ display: 'flex', margin: 8, pointerEvents: 'all' }}>
 			<span
-				title="Annotations the agent has not answered yet"
+				title="Marks the agent has not answered yet"
 				style={{
 					padding: '8px 12px',
 					borderRadius: 10,
@@ -36,41 +83,35 @@ function AnnotateButton() {
 			>
 				{items} items · {open} open {open === 1 ? 'mark' : 'marks'}
 			</span>
-			<button
-				onClick={() => createAnnotation(editor)}
-				title="Leave the agent a note. Select shapes first to aim it at them."
-				style={{
-					padding: '8px 14px',
-					border: '2px solid #e0457b',
-					borderRadius: 10,
-					background: '#fde4ee',
-					color: '#9b1d4d',
-					font: '600 14px system-ui',
-					cursor: 'pointer',
-				}}
-			>
-				✎ Annotate
-			</button>
 		</div>
 	)
 }
 
-const components: TLComponents = { SharePanel: AnnotateButton }
+const components: TLComponents = { SharePanel: CountPill, Toolbar, InFrontOfTheCanvas: AgentBadges }
 
 function onMount(editor: Editor) {
 	const stopPush = pushContextToServer(editor)
-	const stopRules = reopenEditedAnnotations(editor)
+	const stopRules = reopenEditedMarks(editor)
+	const stopCards = convertUserMediaToCards(editor)
+	setBridgeEditor(editor)
 	return () => {
+		setBridgeEditor(null)
 		stopPush()
 		stopRules()
+		stopCards()
 	}
 }
 
 export function App() {
-	const store = useSync({ uri: `${wsProtocol}://${location.host}/connect`, assets })
+	const store = useSync({
+		uri: `${wsProtocol}://${location.host}/connect`,
+		assets,
+		shapeUtils: syncShapeUtils,
+		onCustomMessageReceived: onBridgeMessage,
+	})
 	return (
 		<div style={{ position: 'fixed', inset: 0 }}>
-			<Tldraw store={store} components={components} onMount={onMount} />
+			<Tldraw store={store} shapeUtils={shapeUtils} tools={tools} overrides={overrides} components={components} onMount={onMount} />
 		</div>
 	)
 }
