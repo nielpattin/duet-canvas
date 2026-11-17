@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
+import { ChevronDownIcon } from '../icons.tsx'
 import { chat, useChat, type ModelInfo } from './store.ts'
 
 // Providers are a rail on the left and only the active provider's models are listed, so the ~120 models never render at once.
@@ -34,7 +35,7 @@ export function ModelPicker() {
 		<>
 			<button type="button" className="model-trigger" popoverTarget="model-popover" title="Change model">
 				<span className="model-trigger-name">{model?.name ?? 'Model'}</span>
-				<span aria-hidden="true">▾</span>
+				<ChevronDownIcon />
 			</button>
 			<div
 				id="model-popover"

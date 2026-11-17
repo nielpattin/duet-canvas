@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react'
 import './chat.css'
+import { CloseIcon } from '../icons.tsx'
 import { Composer } from './Composer.tsx'
 import { HistoryPicker } from './HistoryPicker.tsx'
 import { Message } from './Message.tsx'
@@ -44,7 +45,7 @@ export function ChatPanel() {
 					</>
 				)}
 				<button type="button" className="chat-icon" aria-label="Close chat" onClick={chat.toggle}>
-					×
+					<CloseIcon size={16} />
 				</button>
 			</header>
 			{kind === 'locked' && (

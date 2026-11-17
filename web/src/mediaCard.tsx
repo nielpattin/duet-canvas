@@ -1,5 +1,5 @@
-import {
-	createShapeId,
+import { SparkIcon } from './icons.tsx'
+import { createShapeId,
 	HTMLContainer,
 	Rectangle2d,
 	resizeBox,
@@ -101,8 +101,8 @@ function MediaCardView({ shape }: { shape: MediaCardShape }) {
 				) : (
 					<>
 						{byAgent && (
-							<span title="Added by the agent" style={{ color: '#6d4aff', marginRight: 6 }}>
-								✦
+							<span title="Added by the agent" style={{ color: '#6d4aff', marginRight: 6, display: 'inline-flex', verticalAlign: '-1px' }}>
+								<SparkIcon size={14} />
 							</span>
 						)}
 						{caption || (isSelected && <span style={{ color: '#999' }}>Double-click to add a caption</span>)}

@@ -1,4 +1,5 @@
 import { memo } from 'react'
+import { CheckIcon, CloseIcon, DashIcon } from '../icons.tsx'
 import { Md } from './Markdown.tsx'
 import type { WireMessage } from './store.ts'
 
@@ -54,7 +55,11 @@ export const Message = memo(function Message({ message, tools }: { message: Wire
 				const s = state.get(b.id) ?? 'stopped'
 				return (
 					<div key={i} className="chat-tool" data-state={s} title={b.args}>
-						<span className="chat-tool-mark" role="img" aria-label={s} />
+						<span className="chat-tool-mark" role="img" aria-label={s}>
+							{s === 'done' && <CheckIcon />}
+							{s === 'error' && <CloseIcon size={12} />}
+							{s === 'stopped' && <DashIcon />}
+						</span>
 						{toolLabel(b.name)}
 						{s === 'running' && <span className="chat-muted">working…</span>}
 					</div>

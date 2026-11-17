@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { CloseIcon, PaperclipIcon } from '../icons.tsx'
 import { MAX_IMAGES } from './images.ts'
 import { ModelPicker } from './ModelPicker.tsx'
 import { chat, useChat } from './store.ts'
@@ -23,19 +24,11 @@ function QueueChips() {
 						</button>
 					)}
 					<button type="button" aria-label="Take it back into the message box" title="Take it back to edit" onClick={() => chat.unqueue(text, q)}>
-						×
+						<CloseIcon />
 					</button>
 				</li>
 			))}
 		</ul>
-	)
-}
-
-function AttachIcon() {
-	return (
-		<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-			<path d="M13.5 7.5 8 13a3.2 3.2 0 0 1-4.5-4.5l5.6-5.6a2.1 2.1 0 0 1 3 3L6.4 11.4a1 1 0 0 1-1.5-1.4L10 4.9" />
-		</svg>
 	)
 }
 
@@ -80,7 +73,7 @@ export function Composer() {
 							<li key={img.id}>
 								<img src={img.url} alt="Attached" />
 								<button type="button" aria-label="Remove image" onClick={() => chat.removeImage(img.id)}>
-									×
+									<CloseIcon size={12} />
 								</button>
 							</li>
 						))}
@@ -112,7 +105,7 @@ export function Composer() {
 				<div className="chat-controls">
 					<input ref={files} type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden onChange={(e) => (addFiles(e.target.files ?? []), (e.target.value = ''))} />
 					<button type="button" className="chat-icon" title="Attach image" aria-label="Attach image" disabled={draft.images.length >= MAX_IMAGES} onClick={() => files.current?.click()}>
-						<AttachIcon />
+						<PaperclipIcon />
 					</button>
 					<ModelPicker />
 					{levels.length > 1 && (

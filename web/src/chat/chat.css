@@ -108,9 +108,8 @@
 .chat-tool { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12.5px; }
 .chat-tool[data-state='running'] { color: var(--ink); }
 .chat-tool-mark { width: 14px; height: 14px; flex: none; border-radius: 50%; display: grid; place-items: center; font-size: 11px; line-height: 1; }
-.chat-tool[data-state='done'] .chat-tool-mark::before { content: '✓'; color: var(--ok); }
-.chat-tool[data-state='error'] .chat-tool-mark::before { content: '✕'; color: var(--danger); }
-.chat-tool[data-state='stopped'] .chat-tool-mark::before { content: '–'; }
+.chat-tool[data-state='done'] .chat-tool-mark { color: var(--ok); }
+.chat-tool[data-state='error'] .chat-tool-mark { color: var(--danger); }
 .chat-tool[data-state='running'] .chat-tool-mark, .chat-spin { border: 2px solid var(--line); border-top-color: var(--accent); animation: chat-spin 0.7s linear infinite; box-sizing: border-box; }
 .chat-working { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--muted); font-size: 12.5px; }
 .chat-spin { width: 14px; height: 14px; border-radius: 50%; flex: none; }
@@ -128,7 +127,7 @@
 .chat-queue li { display: flex; align-items: center; gap: 6px; padding: 4px 4px 4px 10px; border: 1px dashed var(--line); border-radius: 10px; font-size: 12.5px; }
 .chat-queue-kind { color: var(--accent); font-weight: 600; flex: none; }
 .chat-queue-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.chat-queue button { border: 0; background: none; padding: 2px 6px; border-radius: 6px; color: var(--muted); }
+.chat-queue button { display: inline-flex; align-items: center; border: 0; background: none; padding: 2px 6px; border-radius: 6px; color: var(--muted); }
 .chat-queue button:hover { background: var(--surface); color: var(--ink); }
 
 /* Composer radius 14 = inner control radius 8 + padding 6: concentric corners. */
@@ -143,7 +142,7 @@
 .chat-attachments { list-style: none; margin: 0; padding: 2px 2px 4px; display: flex; flex-wrap: wrap; gap: 6px; }
 .chat-attachments li { position: relative; }
 .chat-attachments img { display: block; width: 52px; height: 52px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); }
-.chat-attachments button { position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; padding: 0; border-radius: 50%; border: 1px solid var(--line); background: var(--bg); color: var(--ink); font-size: 13px; line-height: 1; }
+.chat-attachments button { display: grid; place-items: center; position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; padding: 0; border-radius: 50%; border: 1px solid var(--line); background: var(--bg); color: var(--ink); font-size: 13px; line-height: 1; }
 .chat-controls { display: flex; align-items: center; gap: 4px; }
 
 .chat-effort { height: 32px; padding: 0 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font-size: 13px; }
@@ -215,6 +214,6 @@
 .history-open[aria-current='true'] { background: var(--accent-soft); }
 .history-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .history-open .chat-muted { flex: none; font-variant-numeric: tabular-nums; }
-.history-delete { flex: none; border: 0; background: none; padding: 6px 8px; border-radius: 8px; color: var(--muted); font: inherit; cursor: pointer; }
+.history-delete { display: grid; place-items: center; flex: none; border: 0; background: none; padding: 6px 8px; border-radius: 8px; color: var(--muted); font: inherit; cursor: pointer; }
 .history-delete:hover { background: var(--surface); color: var(--ink); }
 .history-delete[data-confirm] { color: var(--danger); font-weight: 600; }

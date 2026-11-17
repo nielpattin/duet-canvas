@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { CloseIcon } from '../icons.tsx'
 import { chat, useChat } from './store.ts'
 
 const rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto', style: 'short' })
@@ -56,7 +57,7 @@ export function HistoryPicker() {
 									</button>
 								) : (
 									<button type="button" className="history-delete" aria-label={`Delete ${c.title}`} onClick={() => setConfirm(c.id)}>
-										×
+										<CloseIcon />
 									</button>
 								))}
 						</li>

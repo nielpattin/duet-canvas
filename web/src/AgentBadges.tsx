@@ -1,8 +1,10 @@
 import { useEditor, useValue } from 'tldraw'
+import { SparkIcon } from './icons.tsx'
 
-// A small ✦ in the corner of the agent's text blocks, so you can tell its words from yours at a glance.
-// Its pictures carry the ✦ in their caption (see mediaCard.tsx); diagram shapes and arrows are not badged.
+// A small spark in the corner of the agent's text blocks, so you can tell its words from yours at a glance.
+// Its pictures carry the spark in their caption (see mediaCard.tsx); diagram shapes and arrows are not badged.
 const AGENT_TEXT_KINDS = new Set(['agent-note', 'agent-reply'])
+
 export function AgentBadges() {
 	const editor = useEditor()
 	const badges = useValue(
@@ -40,13 +42,13 @@ export function AgentBadges() {
 						borderRadius: '50%',
 						background: '#6d4aff',
 						color: 'white',
-						font: '700 12px/20px system-ui',
-						textAlign: 'center',
+						display: 'grid',
+						placeItems: 'center',
 						boxShadow: '0 1px 3px rgba(0,0,0,.35)',
 						pointerEvents: 'none',
 					}}
 				>
-					✦
+					<SparkIcon />
 				</div>
 			))}
 		</>
