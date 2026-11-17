@@ -68,7 +68,7 @@ export function createAnnotation(editor: Editor) {
 			type: 'arrow',
 			x: 0,
 			y: 0,
-			props: { color: 'light-red', dash: 'dashed', start: noteCenter, end: tb.center },
+			props: { color: 'light-red', dash: 'dashed', start: noteCenter, end: tb.center, bend: 30 },
 			meta: { author: 'user', kind: 'link' },
 		})
 		editor.createBindings(

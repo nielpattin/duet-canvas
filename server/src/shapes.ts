@@ -61,9 +61,11 @@ export const ShapeInput = z.object({
 	x2: z.number().optional().describe('Arrow only: end point x when `to` is not given'),
 	y2: z.number().optional().describe('Arrow only: end point y when `to` is not given'),
 	route: z
-		.enum(['straight', 'elbow'])
+		.enum(['straight', 'curve', 'elbow'])
 		.optional()
-		.describe('Arrow only: "straight" (default) or "elbow" (right-angle routing, good for loops and long flows)'),
+		.describe(
+			'Arrow only: "straight" (default, tidy flows), "curve" (gentle arc, good for maps and trees that fan out) or "elbow" (right angles, good for loops)'
+		),
 })
 export type ShapeInput = z.infer<typeof ShapeInput>
 
@@ -424,13 +426,13 @@ function buildShape(
 				color,
 				fill: 'none',
 				dash: 'draw',
-				size: 'm',
+				size: input.route === 'curve' ? 's' : 'm',
 				arrowheadStart: 'none',
 				arrowheadEnd: 'arrow',
 				font: 'draw',
 				start,
 				end,
-				bend: 0,
+				bend: input.route === 'curve' ? curveBend(start, end) : 0,
 				richText,
 				labelPosition: 0.5,
 				scale: 1,
@@ -461,6 +463,11 @@ function buildShape(
 			richText,
 		},
 	} as TLShape
+}
+
+// How far a "curve" arrow bows away from the straight line: a gentle arc that grows with the length.
+function curveBend(a: Point, b: Point): number {
+	return Math.round(Math.min(90, Math.max(24, Math.hypot(b.x - a.x, b.y - a.y) * 0.2)))
 }
 
 // The look of every text block the agent writes: a violet, sans-serif, left-aligned box. Together with
@@ -538,7 +545,7 @@ function bindArrow(txn: Txn, arrow: TLShape, from: TLShape | undefined, to: TLSh
 function addLink(txn: Txn, from: TLShape, to: TLShape, c: Common): TLShape {
 	const arrow = validated(
 		buildShape(
-			{ type: 'arrow', from: from.id, to: to.id, color: 'grey' },
+			{ type: 'arrow', from: from.id, to: to.id, color: 'grey', route: 'curve' },
 			{ ...c, meta: { author: 'agent', kind: 'link' } },
 			{ w: 0, h: 0 },
 			(id) => (id === from.id ? from : id === to.id ? to : undefined)

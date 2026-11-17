@@ -65,6 +65,7 @@ STAYING IN SYNC (the user edits the canvas while you work)
 
 LAYOUT
 - Arrows: give shapes ids and connect them with {type:"arrow", from, to}; they bind and follow the shapes when moved.
+  Pick route per arrow: "straight" for tidy flows, "curve" for maps/trees that fan out, "elbow" for loops.
   Lay diagrams out in a grid so arrows run between neighbours without crossing other shapes, and fix any warning
   create_shapes returns.
 - Omit x and y when creating shapes, text blocks and images: the server finds a free spot near the anchor (the "near"
@@ -227,7 +228,7 @@ export function buildMcpServer() {
 			description:
 				'Create diagram shapes (boxes, notes, arrows...). Give shapes an `id` so arrows can reference them via from/to ' +
 				'(arrows then bind and follow the shapes). Omit x/y to auto-place in free space. Geo shapes default to 160x100. ' +
-				'Shapes joined by arrows get extra room automatically. Arrow `route` is "straight" (default) or "elbow" (right-angle, good for loops). ' +
+				'Shapes joined by arrows get extra room automatically. Arrow `route`: "straight" (default, tidy flows), "curve" (gentle arc, for maps and trees that fan out) or "elbow" (right angles, for loops). ' +
 				'Read the returned warnings: they flag arrows that pass through other shapes or are too short to see. ' +
 				'Everything created is marked author "agent".',
 			inputSchema: {
