@@ -1,0 +1,14 @@
+node_modules
+dist
+*.log
+*.tsbuildinfo
+
+# Canvas data (database, uploads, last UI context), including local test dirs
+.data
+.data-*
+
+# Local env and OS noise
+.env
+.env.*
+.DS_Store
+Thumbs.db

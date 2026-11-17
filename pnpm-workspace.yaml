@@ -1,0 +1,14 @@
+packages:
+  - web
+  - server
+allowBuilds:
+  esbuild: true
+minimumReleaseAgeExclude:
+  - '@tldraw/driver@5.6.1'
+  - '@tldraw/editor@5.6.1'
+  - '@tldraw/state-react@5.6.1'
+  - '@tldraw/store@5.6.1'
+  - '@tldraw/sync-core@5.6.1'
+  - '@tldraw/sync@5.6.1'
+  - '@tldraw/tlschema@5.6.1'
+  - tldraw@5.6.1
