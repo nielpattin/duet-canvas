@@ -59,13 +59,40 @@ export interface Point {
 
 // Candidate top-left corners for a w x h block next to `anchor`, in reading order of preference:
 // right, below, left, above. All aligned to the anchor's edge.
-export function sidesOf(anchor: Rect, w: number, h: number): Point[] {
+export function sidesOf(anchor: Rect, w: number, h: number, gap = GAP): Point[] {
 	return [
-		{ x: anchor.x + anchor.w + GAP, y: anchor.y },
-		{ x: anchor.x, y: anchor.y + anchor.h + GAP },
-		{ x: anchor.x - w - GAP, y: anchor.y },
-		{ x: anchor.x, y: anchor.y - h - GAP },
+		{ x: anchor.x + anchor.w + gap, y: anchor.y },
+		{ x: anchor.x, y: anchor.y + anchor.h + gap },
+		{ x: anchor.x - w - gap, y: anchor.y },
+		{ x: anchor.x, y: anchor.y - h - gap },
 	]
+}
+
+// Shapes joined by arrows need room for the arrow (and its label) to be visible between them.
+export const DIAGRAM_GAP = 112
+
+// Does the straight segment a -> b pass through the rectangle? (Liang-Barsky clipping.)
+export function segmentHitsRect(a: Point, b: Point, r: Rect): boolean {
+	let t0 = 0
+	let t1 = 1
+	const dx = b.x - a.x
+	const dy = b.y - a.y
+	for (const [p, q] of [
+		[-dx, a.x - r.x],
+		[dx, r.x + r.w - a.x],
+		[-dy, a.y - r.y],
+		[dy, r.y + r.h - a.y],
+	] as const) {
+		if (p === 0) {
+			if (q < 0) return false
+		} else {
+			const t = q / p
+			if (p < 0) t0 = Math.max(t0, t)
+			else t1 = Math.min(t1, t)
+			if (t0 > t1) return false
+		}
+	}
+	return true
 }
 
 export interface Placement {
@@ -73,12 +100,15 @@ export interface Placement {
 	prefer: Point[]
 	/** When none of `prefer` is free, search outward from here for the nearest free spot. */
 	fallback: Point
+	/** Clear space to keep around other shapes. Defaults to GAP. */
+	gap?: number
 }
 
 // Finds a free w x h rectangle. Never returns a spot that overlaps an obstacle (plus GAP), so agent-made
 // blocks cannot land on top of anything already on the canvas.
 export function findFreeRect(obstacles: Rect[], w: number, h: number, where: Placement): Rect {
-	const free = (x: number, y: number) => !obstacles.some((o) => overlaps({ x, y, w, h }, o, GAP))
+	const gap = where.gap ?? GAP
+	const free = (x: number, y: number) => !obstacles.some((o) => overlaps({ x, y, w, h }, o, gap))
 	for (const p of where.prefer) if (free(p.x, p.y)) return { ...p, w, h }
 	const origin = where.prefer[0] ?? where.fallback
 
@@ -114,5 +144,5 @@ export function findFreeRect(obstacles: Rect[], w: number, h: number, where: Pla
 	}
 	// Nothing nearby: put it below everything.
 	const bottom = obstacles.reduce((m, o) => Math.max(m, o.y + o.h), origin.y)
-	return { x: origin.x, y: bottom + GAP, w, h }
+	return { x: origin.x, y: bottom + gap, w, h }
 }

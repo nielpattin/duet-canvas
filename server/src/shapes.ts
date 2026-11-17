@@ -18,7 +18,7 @@ import { getIndexAbove, type IndexKey } from '@tldraw/utils'
 import { z } from 'zod'
 import { safeId, UPLOADS } from './config.ts'
 import { sniffMedia } from './media.ts'
-import { DRAW_M, findFreeRect, GAP, overlaps, sidesOf, textBlockHeight, type Point, type Rect } from './layout.ts'
+import { DIAGRAM_GAP, DRAW_M, findFreeRect, GAP, overlaps, segmentHitsRect, sidesOf, textBlockHeight, type Point, type Rect } from './layout.ts'
 import { room } from './room.ts'
 import { getUiContext } from './uiContext.ts'
 
@@ -60,6 +60,10 @@ export const ShapeInput = z.object({
 	to: z.string().optional().describe('Arrow only: id of the shape the arrow ends at'),
 	x2: z.number().optional().describe('Arrow only: end point x when `to` is not given'),
 	y2: z.number().optional().describe('Arrow only: end point y when `to` is not given'),
+	route: z
+		.enum(['straight', 'elbow'])
+		.optional()
+		.describe('Arrow only: "straight" (default) or "elbow" (right-angle routing, good for loops and long flows)'),
 })
 export type ShapeInput = z.infer<typeof ShapeInput>
 
@@ -415,7 +419,7 @@ function buildShape(
 			y: 0,
 			type: 'arrow',
 			props: {
-				kind: 'arc',
+				kind: input.route === 'elbow' ? 'elbow' : 'arc',
 				labelColor: 'black',
 				color,
 				fill: 'none',
@@ -496,7 +500,12 @@ function buildAgentBlock(text: string, rect: Rect, c: Common): TLShape {
 	} as TLShape)
 }
 
-function arrowBinding(arrow: TLShape, target: TLShape, terminal: 'start' | 'end'): TLBinding {
+interface Anchors {
+	start?: Point
+	end?: Point
+}
+
+function arrowBinding(arrow: TLShape, target: TLShape, terminal: 'start' | 'end', anchor?: Point): TLBinding {
 	return {
 		id: createBindingId(),
 		typeName: 'binding',
@@ -505,22 +514,22 @@ function arrowBinding(arrow: TLShape, target: TLShape, terminal: 'start' | 'end'
 		toId: target.id,
 		props: {
 			terminal,
-			normalizedAnchor: { x: 0.5, y: 0.5 },
+			normalizedAnchor: anchor ?? { x: 0.5, y: 0.5 },
 			isExact: false,
-			isPrecise: false,
+			isPrecise: anchor !== undefined,
 			snap: 'none',
 		},
 		meta: {},
 	} as TLBinding
 }
 
-function bindArrow(txn: Txn, arrow: TLShape, from: TLShape | undefined, to: TLShape | undefined) {
-	for (const [target, terminal] of [
-		[from, 'start'],
-		[to, 'end'],
+function bindArrow(txn: Txn, arrow: TLShape, from: TLShape | undefined, to: TLShape | undefined, anchors: Anchors = {}) {
+	for (const [target, terminal, anchor] of [
+		[from, 'start', anchors.start],
+		[to, 'end', anchors.end],
 	] as const) {
 		if (!target) continue
-		const binding = validated(arrowBinding(arrow, target, terminal))
+		const binding = validated(arrowBinding(arrow, target, terminal, anchor))
 		txn.set(binding.id, binding)
 	}
 }
@@ -545,12 +554,40 @@ export function createShapes(inputs: ShapeInput[], pageIdHint?: string) {
 	return room.storage.transaction((txn) => {
 		const all = Array.from(txn.values())
 		const obstacles = obstaclesOn(all, pageId)
+		// Rect of every shape on the page by id, so arrows can be checked for crossing shapes.
+		const rects = new Map<string, Rect>()
+		for (const s of all.filter(isShape).filter((s) => s.parentId === pageId)) {
+			const r = rectOf(s)
+			if (r) rects.set(s.id, r)
+		}
+		// Shapes that arrows attach to need extra room around them so the arrows are visible.
+		const connected = new Set(inputs.flatMap((i) => [i.from, i.to]).filter((id): id is string => !!id).map(normShapeId))
 		let index = topIndex(all, pageId)
 		const created = new Map<string, TLShape>()
 		const lookup = (id: string) => created.get(id) ?? (txn.get(id) as TLShape | undefined)
 
+		// A shape reached by an arrow is placed beside the shape the arrow comes from (right, then below, ...),
+		// so a flow reads as a flow and a branch drops below its parent instead of stringing out in one row.
+		const predecessor = new Map<string, string>()
+		for (const i of inputs) {
+			if (i.type === 'arrow' && i.from && i.to && !predecessor.has(normShapeId(i.to))) {
+				predecessor.set(normShapeId(i.to), normShapeId(i.from))
+			}
+		}
+		const nonArrows = inputs.filter((i) => i.type !== 'arrow')
+		const byId = new Map<string, ShapeInput>(nonArrows.flatMap((i) => (i.id ? [[normShapeId(i.id), i] as const] : [])))
+		const seen = new Set<ShapeInput>()
+		const order: ShapeInput[] = []
+		const visit = (i: ShapeInput) => {
+			if (seen.has(i)) return
+			seen.add(i)
+			const parent = i.id ? byId.get(predecessor.get(normShapeId(i.id)) ?? '') : undefined
+			if (parent) visit(parent) // place parents first
+			order.push(i)
+		}
+		nonArrows.forEach(visit)
 		// Arrows last, so they can reference shapes created in the same call.
-		const ordered = [...inputs].sort((a, b) => Number(a.type === 'arrow') - Number(b.type === 'arrow'))
+		const ordered = [...order, ...inputs.filter((i) => i.type === 'arrow')]
 		const result: { id: string; x?: number; y?: number; placed?: boolean }[] = []
 		const warnings: string[] = []
 
@@ -558,22 +595,27 @@ export function createShapes(inputs: ShapeInput[], pageIdHint?: string) {
 			index = getIndexAbove(index)
 			const isArrow = input.type === 'arrow'
 			const text = input.text ?? ''
-			const w = input.w ?? (input.type === 'text' ? 200 : input.type === 'note' ? 200 : 160)
+			// A diamond only has room for text in its middle, so it needs to be bigger than a box to fit a label.
+			const w = input.w ?? (input.type === 'text' || input.type === 'note' ? 200 : input.type === 'diamond' ? 200 : 160)
 			const h =
 				input.type === 'note'
 					? 200
-					: input.h ?? Math.max(input.type === 'text' ? 40 : 100, text ? textBlockHeight(text, w) : 0)
+					: input.h ??
+						Math.max(input.type === 'text' ? 40 : input.type === 'diamond' ? 130 : 100, text ? textBlockHeight(text, w) : 0)
 			let placed = false
 			const spec = { ...input }
+			const gap = input.id && connected.has(normShapeId(input.id)) ? DIAGRAM_GAP : GAP
 
 			if (!isArrow) {
 				if (spec.x === undefined || spec.y === undefined) {
 					const nearShape = spec.near ? lookup(normShapeId(spec.near)) : undefined
 					if (spec.near && !nearShape) throw new Error(`Unknown "near" shape ${spec.near}`)
-					const nearRect = nearShape && rectOf(nearShape)
+					const parentId = input.id ? predecessor.get(normShapeId(input.id)) : undefined
+					const anchorRect = (nearShape && rectOf(nearShape)) ?? (parentId ? rects.get(parentId) : undefined)
 					const spot = findFreeRect(obstacles, w, h, {
-						prefer: nearRect ? sidesOf(nearRect, w, h) : [],
+						prefer: anchorRect ? sidesOf(anchorRect, w, h, gap) : [],
 						fallback: viewportCorner(pageId),
+						gap,
 					})
 					spec.x = spot.x
 					spec.y = spot.y
@@ -588,12 +630,61 @@ export function createShapes(inputs: ShapeInput[], pageIdHint?: string) {
 			if (txn.get(shape.id)) throw new Error(`Shape id ${shape.id} already exists`)
 			txn.set(shape.id, shape)
 			created.set(shape.id, shape)
+			if (!isArrow) rects.set(shape.id, { x: spec.x!, y: spec.y!, w, h })
 			result.push(isArrow ? { id: shape.id } : { id: shape.id, x: spec.x, y: spec.y, placed })
 
-			if (isArrow) bindArrow(txn, shape, input.from ? lookup(normShapeId(input.from)) : undefined, input.to ? lookup(normShapeId(input.to)) : undefined)
+			if (isArrow) {
+				const from = input.from ? lookup(normShapeId(input.from)) : undefined
+				const to = input.to ? lookup(normShapeId(input.to)) : undefined
+				bindArrow(txn, shape, from, to, input.route === 'elbow' ? elbowAnchors(from, to, rects) : {})
+				warnings.push(...arrowWarnings(input, shape.id, from, to, rects))
+			}
 		}
 		return { created: result, warnings }
 	}).result
+}
+
+// An L-shaped route reads best when the arrow leaves its source sideways and enters its target from above or below.
+// That also keeps a loop-back arrow from landing on the same side as the forward arrow. Aligned shapes keep the default.
+function elbowAnchors(from: TLShape | undefined, to: TLShape | undefined, rects: Map<string, Rect>): Anchors {
+	const a = from && rects.get(from.id)
+	const b = to && rects.get(to.id)
+	if (!a || !b) return {}
+	const dx = b.x + b.w / 2 - (a.x + a.w / 2)
+	const dy = b.y + b.h / 2 - (a.y + a.h / 2)
+	if (Math.abs(dy) < Math.max(a.h, b.h) / 2 || Math.abs(dx) < Math.max(a.w, b.w) / 2) return {}
+	return { start: { x: dx > 0 ? 1 : 0, y: 0.5 }, end: { x: 0.5, y: dy > 0 ? 0 : 1 } }
+}
+
+// An arrow that runs through a third shape, or sits too close to read, is a layout bug the agent can fix.
+function arrowWarnings(
+	input: ShapeInput,
+	arrowId: string,
+	from: TLShape | undefined,
+	to: TLShape | undefined,
+	rects: Map<string, Rect>
+): string[] {
+	if (!from || !to) return []
+	const a = rects.get(from.id)
+	const b = rects.get(to.id)
+	if (!a || !b) return []
+	const label = `Arrow ${input.id ?? arrowId} (${from.id} -> ${to.id})`
+	const center = (r: Rect) => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 })
+	const out: string[] = []
+	// A right-angle route only runs straight (and so through whatever sits between) when the shapes line up.
+	const ca = center(a)
+	const cb = center(b)
+	const aligned = Math.abs(ca.y - cb.y) < Math.max(a.h, b.h) / 2 || Math.abs(ca.x - cb.x) < Math.max(a.w, b.w) / 2
+	if (input.route !== 'elbow' || aligned) {
+		for (const [id, r] of rects) {
+			if (id === from.id || id === to.id) continue
+			if (segmentHitsRect(ca, cb, r)) {
+				out.push(`${label} passes through ${id}. Put the two shapes where nothing sits between them (e.g. in different rows) by giving explicit x/y or a different "near".`)
+			}
+		}
+	}
+	if (overlaps(a, b)) out.push(`${label}: the two shapes overlap, so the arrow will not be visible.`)
+	return out
 }
 
 export function updateShapes(patches: ShapePatch[]) {
