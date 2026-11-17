@@ -46,7 +46,6 @@ export function Composer() {
 	const levels = useChat((s) => s.levels)
 	const thinking = useChat((s) => s.thinking)
 	const draft = useChat((s) => s.draft)
-	const autoAnswer = useChat((s) => s.autoAnswer)
 	const [dragging, setDragging] = useState(false)
 	const files = useRef<HTMLInputElement>(null)
 	const canSend = connected && (draft.text.trim() !== '' || draft.images.length > 0)
@@ -137,10 +136,6 @@ export function Composer() {
 			</div>
 			<div className="chat-foot">
 				<Usage />
-				<label className="chat-auto" title="Answer new marks automatically when the agent is idle">
-					<input type="checkbox" checked={autoAnswer} onChange={(e) => chat.setAutoAnswer(e.target.checked)} />
-					Auto-answer marks
-				</label>
 			</div>
 		</>
 	)

@@ -10,10 +10,8 @@ import {
 	type TLUiActionsContextType,
 } from 'tldraw'
 import type { JSX } from 'react'
-import { chat, getChat, useChat, type Availability } from './chat/store.ts'
-import { answeredMarks, countItems, countOpenMarks, hasText, isOpenMark, markSelection, markText, openMarksWithText, repliesToMark } from './marks.ts'
-
-const chatUsable = (c: { availability: Availability; connected: boolean }) => c.availability.kind === 'ready' && c.connected
+import { chat, useChat } from './chat/store.ts'
+import { answeredMarks, countItems, countOpenMarks, hasText, isOpenMark, markSelection, openMarksWithText, repliesToMark } from './marks.ts'
 
 // Top-to-bottom, then left-to-right.
 const readingOrder = (editor: Editor, marks: TLShape[]) =>
@@ -189,41 +187,4 @@ export function OpenMarksPill(): JSX.Element {
 			)}
 		</span>
 	)
-}
-
-const AUTO_ANSWER_POLL_MS = 1000
-const AUTO_ANSWER_DEBOUNCE_MS = 2000
-
-/**
- * Auto-answers open marks when the chat's auto-answer toggle is on: one prompt per distinct set of
- * open marks. Returns a cleanup function (use as part of the `onMount` return value).
- */
-export function watchOpenMarks(editor: Editor) {
-	let sent = ''
-	let pending = ''
-	let due = 0
-	// shortcut: the chat store is not a tldraw signal, so poll it; upgrade if the store exports a subscription.
-	const tick = () => {
-		const c = getChat()
-		const marks = openMarksWithText(editor)
-		const signature = marks.map((m) => `${m.id} ${markText(m)}`).sort().join('\n')
-		const wanted = c.autoAnswer && chatUsable(c) && !c.running && marks.length > 0 && editor.getEditingShapeId() === null && signature !== sent
-		if (!wanted) {
-			pending = ''
-			due = 0
-			return
-		}
-		if (signature !== pending) {
-			pending = signature
-			due = Date.now() + AUTO_ANSWER_DEBOUNCE_MS
-			return
-		}
-		if (Date.now() < due) return
-		sent = signature
-		pending = ''
-		due = 0
-		chat.prompt('Answer my open marks')
-	}
-	const timer = setInterval(tick, AUTO_ANSWER_POLL_MS)
-	return () => clearInterval(timer)
 }

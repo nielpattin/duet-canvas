@@ -49,7 +49,7 @@ canvas-idea start --port 5859 --data-dir D:\canvas --no-open
 - **Images:** attach, paste or drop (PNG, JPEG, GIF, WebP, up to 6, shrunk to 2000px).
 - **Cost and context** of the current chat show under the box (spend, tokens in context; the bar turns amber, then red).
 - **Chats** are omp sessions in `<data dir>/sessions`. **History** lists and reopens them; **New chat** starts a new session and keeps the old file. Long chats render the newest 30 messages and load more as you scroll up.
-- **Marks:** Ctrl+M marks the selection, Shift+M jumps to the next open mark, **Ask agent** (pill and context menu) prompts the agent, **Clear answered marks** tidies up, and **Auto-answer marks** (off by default) answers new marks while the agent is idle.
+- **Marks:** Ctrl+M marks the selection, Shift+M jumps to the next open mark, **Ask agent** (pill and context menu) prompts the agent, **Clear answered marks** tidies up.
 - The panel follows tldraw's light/dark/system theme.
 
 ## Connect your agent

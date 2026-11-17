@@ -20,7 +20,7 @@ import { ChatPanel, ChatToggle } from './chat/ChatPanel.tsx'
 import { setDarkMode } from './chat/theme.ts'
 import { onBridgeMessage, setBridgeEditor } from './bridge.ts'
 import { keepMarksTidy, reopenEditedMarks } from './marks.ts'
-import { addMarkActions, MarkMenuItems, markTranslations, OpenMarksPill, watchOpenMarks } from './markAssist.tsx'
+import { addMarkActions, MarkMenuItems, markTranslations, OpenMarksPill } from './markAssist.tsx'
 import { MarkTool } from './MarkTool.ts'
 import { convertUserMediaToCards, MediaCardShapeUtil } from './mediaCard.tsx'
 import { pushContextToServer } from './pushContext.ts'
@@ -98,13 +98,11 @@ function onMount(editor: Editor) {
 	const stopRules = reopenEditedMarks(editor)
 	const stopTidy = keepMarksTidy(editor)
 	const stopCards = convertUserMediaToCards(editor)
-	const stopMarkWatch = watchOpenMarks(editor)
 	// The chat panel sits outside <Tldraw>, so it gets tldraw's theme (light/dark/system, live) from here.
 	const stopTheme = react('chat theme', () => setDarkMode(editor.user.getIsDarkMode()))
 	setBridgeEditor(editor)
 	return () => {
 		setBridgeEditor(null)
-		stopMarkWatch()
 		stopTheme()
 		stopPush()
 		stopRules()

@@ -51,7 +51,6 @@ export type ChatState = {
 	usage: Usage | null
 	extraTools: string[]
 	draft: { text: string; images: Attachment[] }
-	autoAnswer: boolean
 	error: string | null
 }
 
@@ -68,7 +67,6 @@ type ServerMessage =
 
 const OPEN_KEY = 'canvas.chat.open'
 const TOKEN_KEY = 'canvas.chat.token'
-const AUTO_KEY = 'canvas.chat.autoAnswer'
 
 // The unlock link carries the token once (?chat=...); keep it for later visits and strip it from the address bar.
 function initToken() {
@@ -99,7 +97,6 @@ let state: ChatState = {
 	usage: null,
 	extraTools: [],
 	draft: { text: '', images: [] },
-	autoAnswer: localStorage.getItem(AUTO_KEY) === '1',
 	error: null,
 }
 const listeners = new Set<() => void>()
@@ -113,7 +110,6 @@ const subscribe = (l: () => void) => {
 	listeners.add(l)
 	return () => listeners.delete(l)
 }
-export const getChat = () => state
 
 // Pick the fields a component needs (selectors must return an existing value, not a freshly built one), so typing in
 // the composer does not re-render the whole conversation.
@@ -254,10 +250,6 @@ export const chat = {
 	removeImage(id: string) {
 		revoke(state.draft.images.filter((i) => i.id === id))
 		set({ draft: { ...state.draft, images: state.draft.images.filter((i) => i.id !== id) } })
-	},
-	setAutoAnswer(on: boolean) {
-		localStorage.setItem(AUTO_KEY, on ? '1' : '0')
-		set({ autoAnswer: on })
 	},
 	setError: (error: string | null) => set({ error }),
 	dismissError: () => set({ error: null }),

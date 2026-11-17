@@ -159,7 +159,6 @@
 .chat-usage-bar i { display: block; height: 100%; background: var(--accent); border-radius: 2px; }
 .chat-usage-bar[data-level='mid'] i { background: var(--warn); }
 .chat-usage-bar[data-level='high'] i { background: var(--danger); }
-.chat-auto { display: flex; align-items: center; gap: 6px; flex: none; cursor: pointer; }
 
 /* Toggle sits in tldraw's top-right panel next to the item counter, so it follows tldraw's own theme variables. */
 .chat-toggle {
