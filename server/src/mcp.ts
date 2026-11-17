@@ -8,6 +8,7 @@ import {
 	addTextBlock,
 	changesSince,
 	contentBounds,
+	createPage,
 	currentClock,
 	createShapes,
 	deleteShapes,
@@ -27,6 +28,11 @@ const INSTRUCTIONS = `
 This server is a shared infinite whiteboard (a tldraw canvas) that the user has open in their browser. You and the
 user both draw on it. It is saved on the server, so you can read and edit it even when the browser is closed.
 Coordinates are page pixels, x grows right, y grows down. Shape ids look like "shape:abc".
+
+PAGES
+- The canvas has pages. Every shape and annotation says its pageId and pageName. get_context tells you which page the
+  user is on (currentPage); new content goes there unless you pass pageId. create_page adds a page; you cannot switch
+  the user's view, so say where you put things.
 
 WHO WROTE WHAT
 - Everything you create is stamped author "agent". Shapes with author "user" are the user's.
@@ -131,7 +137,7 @@ export function buildMcpServer() {
 				return {
 					tabOpen,
 					updatedAt: ui.updatedAt ? new Date(ui.updatedAt).toISOString() : null,
-					currentPageId: ui.currentPageId,
+					currentPage: listPages().find((p) => p.id === ui.currentPageId) ?? { id: ui.currentPageId },
 					viewport: ui.viewport,
 					selection: describeShapes(ui.selectedShapeIds),
 					openAnnotations,
@@ -193,11 +199,23 @@ export function buildMcpServer() {
 				text: z.string().min(1),
 				near: z.string().optional().describe('Shape id to sit beside and link to'),
 				w: z.number().optional().describe('Width, default 360'),
+				pageId: z.string().optional().describe('Defaults to the page the user is on'),
 				x: z.number().optional(),
 				y: z.number().optional(),
 			},
 		},
 		(args) => guard(() => addTextBlock(args))
+	)
+
+	server.registerTool(
+		'create_page',
+		{
+			description:
+				'Add a new page (tab) to the canvas, e.g. for a large diagram that would crowd the user\'s current page. ' +
+				'Then pass its id as pageId to create_shapes, add_text_block or add_media. This does not move the user to it: tell them it exists.',
+			inputSchema: { name: z.string().min(1).max(100) },
+		},
+		({ name }) => guard(() => createPage(name))
 	)
 
 	server.registerTool(
@@ -283,6 +301,7 @@ export function buildMcpServer() {
 				y: z.number().optional(),
 				near: z.string().optional(),
 				caption: z.string().optional(),
+				pageId: z.string().optional().describe('Defaults to the page the user is on'),
 			},
 		},
 		async ({ path, url, base64, name, ...rest }) => {

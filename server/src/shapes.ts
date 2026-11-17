@@ -196,6 +196,8 @@ function describeOne(s: TLShape, records: TLRecord[], byId: Map<string, TLRecord
 		y: Math.round(s.y),
 		author: m.author ?? 'user',
 	}
+	const pid = pageOf(s, byId)
+	if (pid) Object.assign(out, { pageId: pid, pageName: (byId.get(pid) as TLPage | undefined)?.name })
 	if (w || h) Object.assign(out, { w: Math.round(w), h: Math.round(h) })
 	const text = textOf(s)
 	if (text) out.text = text
@@ -281,8 +283,25 @@ export function listAnnotations(status: 'open' | 'answered' | 'all' = 'open') {
 // ---- Writing ---------------------------------------------------------------------------------
 
 function validated<T extends TLRecord>(record: T): T {
-	const type = schema.types[record.typeName as 'shape' | 'binding' | 'asset']
+	const type = schema.types[record.typeName as 'shape' | 'binding' | 'asset' | 'page']
 	return type.validate(record) as T
+}
+
+export function createPage(name: string) {
+	return room.storage.transaction((txn) => {
+		const pages = Array.from(txn.values()).filter(isPage)
+		if (pages.some((p) => p.name.toLowerCase() === name.toLowerCase())) throw new Error(`A page named "${name}" already exists`)
+		const last = pages.map((p) => p.index).sort().at(-1)
+		const page = validated({
+			id: `page:${crypto.randomUUID()}` as TLPage['id'],
+			typeName: 'page',
+			name,
+			index: getIndexAbove(last),
+			meta: {},
+		} as TLPage)
+		txn.set(page.id, page)
+		return { id: page.id as string, name }
+	}).result
 }
 
 function resolvePageId(requested?: string): string {
@@ -623,8 +642,8 @@ export function deleteShapes(ids: string[]) {
 
 const BLOCK_WIDTH = 360
 
-export function addTextBlock(opts: { text: string; near?: string; w?: number; x?: number; y?: number }) {
-	const pageId = resolvePageId()
+export function addTextBlock(opts: { text: string; near?: string; w?: number; x?: number; y?: number; pageId?: string }) {
+	const pageId = resolvePageId(opts.pageId)
 	return room.storage.transaction((txn) => {
 		const all = Array.from(txn.values())
 		const obstacles = obstaclesOn(all, pageId)
@@ -745,6 +764,7 @@ export interface AddMediaOptions {
 	y?: number
 	near?: string
 	caption?: string
+	pageId?: string
 }
 
 export interface AddedMedia {
@@ -769,7 +789,7 @@ export function addMedia(opts: AddMediaOptions): AddedMedia {
 		srcH = opts.h ?? Math.round((srcW * 9) / 16)
 		note = 'Could not read the video size; assumed 16:9. Pass w and h to override.'
 	}
-	const pageId = resolvePageId()
+	const pageId = resolvePageId(opts.pageId)
 	const fileId = `${crypto.randomUUID()}-${safeId(opts.name)}`
 	// Write the file before the transaction: an orphan file is harmless, a shape pointing at nothing is not.
 	writeFileSync(join(UPLOADS, fileId), opts.file)

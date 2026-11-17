@@ -27,7 +27,7 @@ claude mcp add --transport http canvas http://localhost:5858/mcp
 ```
 
 Tools: `get_context`, `get_canvas`, `get_changes`, `list_annotations`, `reply_to_annotation`, `resolve_annotation`,
-`add_text_block`, `create_shapes`, `update_shapes`, `delete_shapes`, `view_image`, `add_media`.
+`add_text_block`, `create_page`, `create_shapes`, `update_shapes`, `delete_shapes`, `view_image`, `add_media`.
 
 `add_media` takes PNG, JPEG, GIF, WebP, MP4 or WebM from a local `path`, a `url` (the server downloads it) or `base64`.
 Sample files to try it with are in `examples/media/`. Only images can be *viewed* by the agent (`view_image`).
