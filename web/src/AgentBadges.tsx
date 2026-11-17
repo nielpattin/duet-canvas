@@ -8,14 +8,15 @@ export function AgentBadges() {
 	const badges = useValue(
 		'agent badges',
 		() => {
-			const out: { id: string; x: number; y: number }[] = []
+			const out: { id: string; x: number; y: number; z: number }[] = []
+			const z = editor.getZoomLevel()
 			for (const s of editor.getCurrentPageRenderingShapesSorted()) {
 				const m = s.meta as { author?: string; kind?: string }
 				if (m.author !== 'agent' || !AGENT_TEXT_KINDS.has(m.kind ?? '')) continue
 				const b = editor.getShapePageBounds(s)
 				if (!b) continue
 				const p = editor.pageToViewport({ x: b.maxX, y: b.minY })
-				out.push({ id: s.id, x: p.x, y: p.y })
+				out.push({ id: s.id, x: p.x, y: p.y, z })
 			}
 			return out
 		},
@@ -29,8 +30,11 @@ export function AgentBadges() {
 					title="Written by the agent"
 					style={{
 						position: 'absolute',
-						left: b.x - 26,
-						top: b.y + 6,
+						// Scales with the canvas so the badge keeps its size relative to its block.
+						left: b.x - 6 * b.z - 20,
+						top: b.y + 6 * b.z,
+						transform: `scale(${b.z})`,
+						transformOrigin: '100% 0',
 						width: 20,
 						height: 20,
 						borderRadius: '50%',
