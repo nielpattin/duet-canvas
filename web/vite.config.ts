@@ -8,6 +8,7 @@ export default defineConfig({
 	server: {
 		proxy: {
 			'/connect': { target: SERVER, ws: true },
+			'/chat': { target: SERVER, ws: true },
 			'/api': SERVER,
 			'/uploads': SERVER,
 		},

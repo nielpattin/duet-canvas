@@ -7,6 +7,7 @@ interface BlockMeta {
 	status?: string
 	targetIds?: string[]
 	regionId?: string
+	replyTo?: string
 }
 const metaOf = (s: TLShape) => s.meta as BlockMeta
 
@@ -203,18 +204,28 @@ export function reopenEditedMarks(editor: Editor) {
 	return editor.sideEffects.registerBeforeChangeHandler('shape', (prev, next) => {
 		const m = metaOf(next)
 		if (m.kind !== 'mark' || m.status !== 'answered') return next
-		const before = JSON.stringify((prev.props as { richText?: unknown }).richText)
-		const after = JSON.stringify((next.props as { richText?: unknown }).richText)
+		const before = markText(prev)
+		const after = markText(next)
 		if (before === after) return next
 		return { ...next, opacity: 1, meta: { ...next.meta, status: 'open' } }
 	})
 }
 
-function hasText(s: TLShape) {
-	return JSON.stringify((s.props as { richText?: unknown }).richText).includes('"text":"')
-}
+/** The shape's rich text as a stable string ('' when it has none). */
+export const markText = (s: TLShape) => ('richText' in s.props ? JSON.stringify(s.props.richText ?? '') : '')
+export const hasText = (s: TLShape) => markText(s).includes('"text":"')
 
-export const countOpenMarks = (editor: Editor) => editor.getCurrentPageShapes().filter((s) => isOpenMark(s) && hasText(s)).length
+/** Open marks with something written in them: the ones the agent can answer. */
+export const openMarksWithText = (editor: Editor) => editor.getCurrentPageShapes().filter((s) => isOpenMark(s) && hasText(s))
+
+/** Marks the agent (or the user) already answered, on the current page. */
+export const answeredMarks = (editor: Editor) => editor.getCurrentPageShapes().filter((s) => isMark(s) && metaOf(s).status === 'answered')
+
+/** Agent reply blocks answering this mark (server convention: kind 'agent-reply', meta.replyTo). */
+export const repliesToMark = (editor: Editor, mark: TLShape) =>
+	editor.getCurrentPageShapes().filter((s) => metaOf(s).kind === 'agent-reply' && metaOf(s).replyTo === mark.id)
+
+export const countOpenMarks = (editor: Editor) => openMarksWithText(editor).length
 
 // Shapes a person would count as "items": everything except arrows (links and connectors).
 export const countItems = (editor: Editor) => editor.getCurrentPageShapes().filter((s) => s.type !== 'arrow' && !isRegion(s)).length

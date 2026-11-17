@@ -8,8 +8,10 @@ import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/
 import { Hono } from 'hono'
 import { getMimeType } from 'hono/utils/mime'
 import { WebSocketServer } from 'ws'
-import { ALLOWED_HOSTS, HOST, PORT, safeId, UPLOADS, WEB_DIST } from './config.ts'
+import { ALLOWED_HOSTS, HOST, IN_DOCKER, PORT, safeId, UPLOADS, WEB_DIST } from './config.ts'
 import { answerFromBrowser } from './bridge.ts'
+import { chatToken, tokenOk } from './chat/auth.ts'
+import { ChatHub, detectOmp } from './chat/hub.ts'
 import { buildMcpServer } from './mcp.ts'
 import { closeRoom, room } from './room.ts'
 import { migrateLegacyMarks } from './shapes.ts'
@@ -19,6 +21,20 @@ migrateLegacyMarks()
 
 const hostAllowed = (hostHeader: string | undefined) =>
 	ALLOWED_HOSTS.has((hostHeader ?? '').replace(/:\d+$/, ''))
+
+// A page on another origin must not be able to open the chat socket: whoever can prompt omp can drive this machine.
+// Non-browser clients send no Origin and are already local.
+const originAllowed = (origin: string | undefined) => {
+	if (!origin) return true
+	try {
+		return ALLOWED_HOSTS.has(new URL(origin).hostname)
+	} catch {
+		return false
+	}
+}
+
+// Chat drives the user's own omp, so it only exists for a native run, never in the container.
+const chat = IN_DOCKER ? undefined : new ChatHub()
 
 const app = new Hono()
 
@@ -36,6 +52,13 @@ app.all('/mcp', async (c) => {
 	})
 	await server.connect(transport)
 	return transport.handleRequest(c.req.raw)
+})
+
+app.get('/api/chat/status', async (c) => {
+	if (!chat) return c.json({ kind: 'off' })
+	if (!tokenOk(c.req.query('token'))) return c.json({ kind: 'locked' })
+	const omp = await detectOmp()
+	return c.json(omp.ok ? { kind: 'ready', version: omp.version } : { kind: 'no-omp', message: omp.message })
 })
 
 // The browser tells us what the user has selected / is looking at.
@@ -93,12 +116,18 @@ app.use('*', serveStatic({ root: relative(process.cwd(), WEB_DIST) }))
 const httpServer = serve({ fetch: app.fetch, port: PORT, hostname: HOST }, (info) => {
 	console.log(`canvas  http://${HOST}:${info.port}`)
 	console.log(`mcp     http://${HOST}:${info.port}/mcp`)
+	// The link that unlocks the agent chat in a browser (the token is stored there on first visit).
+	if (chat) console.log(`chat    http://${HOST === '0.0.0.0' ? '127.0.0.1' : HOST}:${info.port}/?chat=${chatToken()}`)
 })
 
 // WebSocket endpoint for the tldraw sync client.
 const wss = new WebSocketServer({ noServer: true })
 httpServer.on('upgrade', (req, socket, head) => {
 	const url = new URL(req.url ?? '/', 'http://localhost')
+	if (url.pathname === '/chat' && chat && hostAllowed(req.headers.host) && originAllowed(req.headers.origin) && tokenOk(url.searchParams.get('token'))) {
+		wss.handleUpgrade(req, socket, head, (ws) => chat.add(ws))
+		return
+	}
 	if (url.pathname !== '/connect' || !hostAllowed(req.headers.host)) {
 		socket.destroy()
 		return
@@ -112,6 +141,7 @@ httpServer.on('upgrade', (req, socket, head) => {
 })
 
 const shutdown = () => {
+	chat?.dispose()
 	closeRoom()
 	process.exit(0)
 }

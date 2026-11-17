@@ -1,7 +1,11 @@
 {
   "name": "canvas-idea",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
+  "bin": {
+    "canvas-idea": "bin/canvas-idea.mjs"
+  },
   "scripts": {
     "dev": "pnpm -r --parallel dev",
     "build": "pnpm -r build",

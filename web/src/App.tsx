@@ -5,12 +5,9 @@ import {
 	DefaultContextMenuContent,
 	DefaultToolbar,
 	DefaultToolbarContent,
+	react,
 	Tldraw,
-	TldrawUiMenuGroup,
-	TldrawUiMenuItem,
 	TldrawUiMenuToolItem,
-	useEditor,
-	useValue,
 	type Editor,
 	type TLAssetStore,
 	type TLComponents,
@@ -19,8 +16,11 @@ import {
 } from 'tldraw'
 import 'tldraw/tldraw.css'
 import { AgentBadges } from './AgentBadges.tsx'
+import { ChatPanel, ChatToggle } from './chat/ChatPanel.tsx'
+import { setDarkMode } from './chat/theme.ts'
 import { onBridgeMessage, setBridgeEditor } from './bridge.ts'
-import { countItems, countOpenMarks, keepMarksTidy, markSelection, reopenEditedMarks } from './marks.ts'
+import { keepMarksTidy, reopenEditedMarks } from './marks.ts'
+import { addMarkActions, MarkMenuItems, markTranslations, OpenMarksPill, watchOpenMarks } from './markAssist.tsx'
 import { MarkTool } from './MarkTool.ts'
 import { convertUserMediaToCards, MediaCardShapeUtil } from './mediaCard.tsx'
 import { pushContextToServer } from './pushContext.ts'
@@ -57,25 +57,17 @@ const overrides: TLUiOverrides = {
 		toolsMap.mark = { id: 'mark', icon: <MarkIcon />, label: 'tool.mark', kbd: 'm', onSelect: () => editor.setCurrentTool('mark') }
 		return toolsMap
 	},
-	translations: { en: { 'tool.mark': 'Mark: leave the agent a note on something' } },
-}
-
-// Right-click on a selection: "Mark selection" leaves the agent a note about everything selected.
-function SelectionMenuItem() {
-	const editor = useEditor()
-	const hasSelection = useValue('has selection', () => editor.getSelectedShapeIds().length > 0, [editor])
-	if (!hasSelection) return null
-	return (
-		<TldrawUiMenuGroup id="mark-selection-group">
-			<TldrawUiMenuItem id="mark-selection" label="Mark selection" icon={<MarkIcon />} onSelect={() => markSelection(editor)} />
-		</TldrawUiMenuGroup>
-	)
+	actions(editor, actions) {
+		addMarkActions(editor, actions)
+		return actions
+	},
+	translations: { en: { 'tool.mark': 'Mark: leave the agent a note on something', ...markTranslations } },
 }
 
 function ContextMenu(props: TLUiContextMenuProps) {
 	return (
 		<DefaultContextMenu {...props}>
-			<SelectionMenuItem />
+			<MarkMenuItems />
 			<DefaultContextMenuContent />
 		</DefaultContextMenu>
 	)
@@ -90,39 +82,30 @@ function Toolbar() {
 	)
 }
 
-function CountPill() {
-	const editor = useEditor()
-	const open = useValue('open marks', () => countOpenMarks(editor), [editor])
-	const items = useValue('item count', () => countItems(editor), [editor])
+function SharePanel() {
 	return (
-		<div style={{ display: 'flex', margin: 8, pointerEvents: 'all' }}>
-			<span
-				title="Marks the agent has not answered yet"
-				style={{
-					padding: '8px 12px',
-					borderRadius: 10,
-					background: 'white',
-					border: `2px solid ${open > 0 ? '#e0457b' : '#d6d6d6'}`,
-					color: open > 0 ? '#9b1d4d' : '#666',
-					font: '600 13px system-ui',
-				}}
-			>
-				{items} items · {open} open {open === 1 ? 'mark' : 'marks'}
-			</span>
+		<div style={{ display: 'flex', gap: 8, margin: 8, pointerEvents: 'all' }}>
+			<OpenMarksPill />
+			<ChatToggle />
 		</div>
 	)
 }
 
-const components: TLComponents = { SharePanel: CountPill, Toolbar, ContextMenu, InFrontOfTheCanvas: AgentBadges }
+const components: TLComponents = { SharePanel, Toolbar, ContextMenu, InFrontOfTheCanvas: AgentBadges }
 
 function onMount(editor: Editor) {
 	const stopPush = pushContextToServer(editor)
 	const stopRules = reopenEditedMarks(editor)
 	const stopTidy = keepMarksTidy(editor)
 	const stopCards = convertUserMediaToCards(editor)
+	const stopMarkWatch = watchOpenMarks(editor)
+	// The chat panel sits outside <Tldraw>, so it gets tldraw's theme (light/dark/system, live) from here.
+	const stopTheme = react('chat theme', () => setDarkMode(editor.user.getIsDarkMode()))
 	setBridgeEditor(editor)
 	return () => {
 		setBridgeEditor(null)
+		stopMarkWatch()
+		stopTheme()
 		stopPush()
 		stopRules()
 		stopTidy()
@@ -138,8 +121,11 @@ export function App() {
 		onCustomMessageReceived: onBridgeMessage,
 	})
 	return (
-		<div style={{ position: 'fixed', inset: 0 }}>
-			<Tldraw store={store} shapeUtils={shapeUtils} tools={tools} overrides={overrides} components={components} onMount={onMount} />
+		<div style={{ position: 'fixed', inset: 0, display: 'flex' }}>
+			<div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
+				<Tldraw store={store} shapeUtils={shapeUtils} tools={tools} overrides={overrides} components={components} onMount={onMount} />
+			</div>
+			<ChatPanel />
 		</div>
 	)
 }

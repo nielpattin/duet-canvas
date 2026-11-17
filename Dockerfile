@@ -20,7 +20,7 @@ COPY --from=build /out/node_modules node_modules
 COPY --from=build /out/package.json ./
 COPY server/src src
 COPY --from=build /app/web/dist ../web/dist
-ENV DATA_DIR=/data HOST=0.0.0.0 PORT=5858 NODE_ENV=production
+ENV DATA_DIR=/data HOST=0.0.0.0 PORT=5858 NODE_ENV=production CANVAS_DOCKER=1
 VOLUME /data
 EXPOSE 5858
 USER 1000

@@ -20,6 +20,38 @@ pnpm build && pnpm start   # everything on http://localhost:5858
 docker compose up --build
 ```
 
+## Agent chat (native only)
+
+The web app has an **Agent chat** panel that drives your own `omp` over its RPC mode (omp must be on your `PATH`, or set `OMP_BIN`). The server starts omp on first use and keeps it alive.
+
+```
+browser --WS /chat?token--> server --stdio JSONL--> omp --mode rpc --MCP http--> server (canvas)
+```
+
+### Run it with the CLI
+
+```sh
+pnpm add -g .            # once, from this repo: puts `canvas-idea` on your PATH (pnpm 12 has no `link --global`)
+canvas-idea              # start in the foreground and open the browser
+canvas-idea start -d     # run in the background (log: <data dir>/canvas-idea.log)
+canvas-idea status | stop | open | url | token
+canvas-idea start --port 5859 --data-dir D:\canvas --no-open
+```
+
+`start` builds `web/dist` if it is missing and prints a link ending in `?chat=<token>`. Open that link once and the browser keeps the token. Without it the chat shows "locked" and `/chat` refuses the socket. The token lives in `<data dir>/chat-token`.
+
+### What it does
+
+- **Docker has no chat.** A container cannot see your omp, so the button is hidden there (the image sets `CANVAS_DOCKER=1`). Docker stays the way to give MCP clients the canvas.
+- **The chat agent only has the canvas tools.** omp runs with `--no-tools`, `tools.xdev: false`, no extensions/skills/rules/context files, and `--yolo`: no bash, edit, eval or filesystem access. Servers from your own `~/.omp/agent/mcp.json` are switched off for the chat (a project-level `enabled: false` stub per name); a warning shows if any other tool still gets through.
+- **Keys** (same as omp): Enter sends, and steers a running agent; Alt+Enter queues a follow-up for after the run; Esc stops (queued text returns to the box). Queued messages show as chips.
+- **Model and effort** come from omp. The picker shows one provider at a time with a search across all. Changing either mid-chat keeps the same session; the provider's prompt cache restarts for that turn.
+- **Images:** attach, paste or drop (PNG, JPEG, GIF, WebP, up to 6, shrunk to 2000px).
+- **Cost and context** of the current chat show under the box (spend, tokens in context; the bar turns amber, then red).
+- **Chats** are omp sessions in `<data dir>/sessions`. **History** lists and reopens them; **New chat** starts a new session and keeps the old file. Long chats render the newest 30 messages and load more as you scroll up.
+- **Marks:** Ctrl+M marks the selection, Shift+M jumps to the next open mark, **Ask agent** (pill and context menu) prompts the agent, **Clear answered marks** tidies up, and **Auto-answer marks** (off by default) answers new marks while the agent is idle.
+- The panel follows tldraw's light/dark/system theme.
+
 ## Connect your agent
 
 ```sh
@@ -60,7 +92,8 @@ The shape is defined twice, in `server/src/mediaCard.ts` and `web/src/mediaCard.
 
 ## Data
 
-`.data/` (or `/data` in Docker): `canvas.db` (document), `ui-context.json` (last selection/viewport), `uploads/`.
+Your OS data dir, or `DATA_DIR` (`/data` in Docker): `canvas.db` (document), `ui-context.json` (last selection/viewport), `uploads/`, and for the chat `sessions/` and `workspace/`.
+The default is `%APPDATA%\canvas-idea` on Windows, `~/Library/Application Support/canvas-idea` on macOS and `$XDG_DATA_HOME` (or `~/.local/share`)`/canvas-idea` on Linux. It used to be `.data/` next to where you ran the server: move it over to keep an old canvas.
 
 ## Security
 
