@@ -1,21 +1,26 @@
 import { useSync } from '@tldraw/sync'
 import {
 	defaultShapeUtils,
+	DefaultContextMenu,
+	DefaultContextMenuContent,
 	DefaultToolbar,
 	DefaultToolbarContent,
 	Tldraw,
+	TldrawUiMenuGroup,
+	TldrawUiMenuItem,
 	TldrawUiMenuToolItem,
 	useEditor,
 	useValue,
 	type Editor,
 	type TLAssetStore,
 	type TLComponents,
+	type TLUiContextMenuProps,
 	type TLUiOverrides,
 } from 'tldraw'
 import 'tldraw/tldraw.css'
 import { AgentBadges } from './AgentBadges.tsx'
 import { onBridgeMessage, setBridgeEditor } from './bridge.ts'
-import { countItems, countOpenMarks, reopenEditedMarks } from './marks.ts'
+import { countItems, countOpenMarks, keepMarksTidy, markSelection, reopenEditedMarks } from './marks.ts'
 import { MarkTool } from './MarkTool.ts'
 import { convertUserMediaToCards, MediaCardShapeUtil } from './mediaCard.tsx'
 import { pushContextToServer } from './pushContext.ts'
@@ -55,6 +60,27 @@ const overrides: TLUiOverrides = {
 	translations: { en: { 'tool.mark': 'Mark: leave the agent a note on something' } },
 }
 
+// Right-click on a selection: "Mark selection" leaves the agent a note about everything selected.
+function SelectionMenuItem() {
+	const editor = useEditor()
+	const hasSelection = useValue('has selection', () => editor.getSelectedShapeIds().length > 0, [editor])
+	if (!hasSelection) return null
+	return (
+		<TldrawUiMenuGroup id="mark-selection-group">
+			<TldrawUiMenuItem id="mark-selection" label="Mark selection" icon={<MarkIcon />} onSelect={() => markSelection(editor)} />
+		</TldrawUiMenuGroup>
+	)
+}
+
+function ContextMenu(props: TLUiContextMenuProps) {
+	return (
+		<DefaultContextMenu {...props}>
+			<SelectionMenuItem />
+			<DefaultContextMenuContent />
+		</DefaultContextMenu>
+	)
+}
+
 function Toolbar() {
 	return (
 		<DefaultToolbar>
@@ -87,17 +113,19 @@ function CountPill() {
 	)
 }
 
-const components: TLComponents = { SharePanel: CountPill, Toolbar, InFrontOfTheCanvas: AgentBadges }
+const components: TLComponents = { SharePanel: CountPill, Toolbar, ContextMenu, InFrontOfTheCanvas: AgentBadges }
 
 function onMount(editor: Editor) {
 	const stopPush = pushContextToServer(editor)
 	const stopRules = reopenEditedMarks(editor)
+	const stopTidy = keepMarksTidy(editor)
 	const stopCards = convertUserMediaToCards(editor)
 	setBridgeEditor(editor)
 	return () => {
 		setBridgeEditor(null)
 		stopPush()
 		stopRules()
+		stopTidy()
 		stopCards()
 	}
 }

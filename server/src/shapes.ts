@@ -88,6 +88,7 @@ export type ShapePatch = z.infer<typeof ShapePatch>
 //          'agent-reply'  an agent text block answering a mark (replyTo)
 //          'agent-note'   an agent text block that is not an answer
 //          'link'         an arrow that only connects a reply to what it answers
+//          'region'       the locked dashed box a mark draws around a selection (mark.meta.regionId)
 // status   marks only: 'open' | 'answered'
 
 interface BlockMeta {
@@ -95,6 +96,7 @@ interface BlockMeta {
 	kind?: string
 	status?: string
 	targetIds?: string[]
+	regionId?: string
 	replyTo?: string
 	answeredBy?: string
 }
@@ -303,8 +305,11 @@ export function listMarks(status: 'open' | 'answered' | 'all' = 'open') {
 		.filter((s) => status === 'all' || (metaOf(s).status ?? 'open') === status)
 		.map((s) => {
 			const m = metaOf(s)
+			const region = m.regionId ? byId.get(m.regionId) : undefined
+			const box = region && isShape(region) ? rectOf(region) : undefined
 			return {
 				...describeOne(s, records, byId, bindings),
+				...(box ? { selection: { x: Math.round(box.x), y: Math.round(box.y), w: Math.round(box.w), h: Math.round(box.h) } } : {}),
 				targets: (m.targetIds ?? [])
 					.map((id) => byId.get(id))
 					.filter((t): t is TLShape => !!t && isShape(t))
@@ -813,6 +818,13 @@ function getMark(txn: Txn, id: string): TLShape {
 	return ann
 }
 
+// The box around a marked selection turns violet (the agent's colour) and solid once the mark is answered.
+function markRegionAnswered(txn: Txn, ann: TLShape) {
+	const regionId = metaOf(ann).regionId
+	const region = regionId ? txn.get(regionId as TLShape['id']) : undefined
+	if (region && isShape(region)) txn.set(region.id, { ...region, props: { ...region.props, color: 'violet', dash: 'solid' } } as TLShape)
+}
+
 // Answering = writing a reply block beside the mark AND flipping its status. Doing both here, in one
 // transaction, is what makes "is it answered?" reliable.
 export function replyToMark(id: string, text: string) {
@@ -823,8 +835,12 @@ export function replyToMark(id: string, text: string) {
 		const obstacles = obstaclesOn(all, pageId)
 		const w = BLOCK_WIDTH
 		const h = Math.max(60, textBlockHeight(text, w))
-		const annRect = rectOf(ann)!
-		// A reply reads best directly under the note it answers, so try below before right.
+		// A mark on a selection points at its dashed box; the reply goes beside that box and points at it too.
+		const regionId = metaOf(ann).regionId
+		const region = regionId ? txn.get(regionId as TLShape['id']) : undefined
+		const anchor = region && isShape(region) ? region : ann
+		const annRect = rectOf(anchor)!
+		// A reply reads best directly under what it answers, so try below before right.
 		const [right, under, left, above] = sidesOf(annRect, w, h, DIAGRAM_GAP) as [Point, Point, Point, Point]
 		const spot = findFreeRect(obstacles, w, h, { prefer: [under, right, left, above], fallback: under })
 		const index = getIndexAbove(topIndex(all, pageId))
@@ -834,8 +850,9 @@ export function replyToMark(id: string, text: string) {
 			meta: { author: 'agent', kind: 'agent-reply', replyTo: ann.id },
 		})
 		txn.set(block.id, block)
-		addLink(txn, block, ann, { pageId, index: getIndexAbove(index), meta: {} })
+		addLink(txn, block, anchor, { pageId, index: getIndexAbove(index), meta: {} })
 		txn.set(ann.id, { ...ann, opacity: 0.55, meta: { ...ann.meta, status: 'answered', answeredBy: block.id } })
+		markRegionAnswered(txn, ann)
 		return { replyId: block.id as string, x: Math.round(spot.x), y: Math.round(spot.y) }
 	}).result
 }
@@ -845,6 +862,7 @@ export function resolveMark(id: string) {
 	return room.storage.transaction((txn) => {
 		const ann = getMark(txn, id)
 		txn.set(ann.id, { ...ann, opacity: 0.55, meta: { ...ann.meta, status: 'answered' } })
+		markRegionAnswered(txn, ann)
 		return ann.id as string
 	}).result
 }

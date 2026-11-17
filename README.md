@@ -45,6 +45,8 @@ attached to it with a dashed arrow. Click empty canvas for a free note. The agen
 block placed next to the mark, and marks it answered (dimmed). Editing an answered mark reopens it. The top-right pill
 shows `N items · M open marks`.
 
+To mark several shapes at once, select them, right-click and choose **Mark selection**. A dashed pink box is drawn around the selection and one arrow joins the note to it. The box follows the shapes when you move them. When the agent answers, the box turns violet and the answer arrow points at it. `list_marks` returns the box as `selection` (x, y, w, h).
+
 Everything the agent creates has `meta.author = 'agent'`. Its text blocks wear a small purple ✦ in the corner and its pictures
 have a ✦ before the caption, so you can tell its words and media from yours. Diagram shapes and arrows are not badged. New content is auto-placed in free space so it never overlaps existing shapes.
 

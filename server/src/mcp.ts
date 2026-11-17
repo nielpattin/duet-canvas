@@ -42,13 +42,15 @@ WHO WROTE WHAT
   shapes for prose; use those tools so the user can tell your words from theirs.
 
 MARKS (how the user talks to you)
-- A mark is a pink handwritten note the user adds with the Mark tool (click a shape or block with the tool to mark it). It can be attached to shapes
+- A mark is a pink handwritten note the user adds with the Mark tool (click a shape or block with the tool to mark it), or by right-clicking a selection and choosing "Mark selection". It can be attached to shapes
   (targetIds), including your own blocks and images, or float free. Its text is the user's message.
 - Each mark has a status: "open" (not handled) or "answered". Editing an answered mark reopens it.
 - Workflow: call list_marks to get the open ones, read each mark AND its targets (the targets say what
   "this" refers to), do what is asked, then close it with reply_to_mark (writes your answer beside it and marks
   it answered) or resolve_mark (no text needed, e.g. you only changed the canvas). Never leave a handled
   mark open, and never touch marks with status "answered" unless the user reopened them.
+- A mark on a selection has a dashed pink box around everything selected ("selection": its x, y, w, h in list_marks).
+  Answering turns the box violet and points your reply at it. To look at it, capture it with bounds = that box.
 - list_marks is enough when you only need the marks; get_context also gives selection and viewport (its marks are a short list).
 - When the user says "this", "that" or "here" without a mark, call get_context: it returns their current
   selection, viewport and open marks. It works with the browser closed too (last known state).
