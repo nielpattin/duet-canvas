@@ -51,6 +51,7 @@ MARKS (how the user talks to you)
   mark open, and never touch marks with status "answered" unless the user reopened them.
 - A mark on a selection has a dashed pink box around everything selected ("selection": its x, y, w, h in list_marks).
   Answering turns the box violet and points your reply at it. To look at it, capture it with bounds = that box.
+- A mark aimed at one of your replies, or at a box you already answered, continues a conversation: list_marks adds "thread" (what the user wrote first, what you answered, and the box it was about, oldest first). Read it before answering.
 - list_marks is enough when you only need the marks; get_context also gives selection and viewport (its marks are a short list).
 - When the user says "this", "that" or "here" without a mark, call get_context: it returns their current
   selection, viewport and open marks. It works with the browser closed too (last known state).

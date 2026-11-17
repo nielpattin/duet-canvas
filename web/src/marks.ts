@@ -38,29 +38,28 @@ function freeSpot(editor: Editor, anchor: { x: number; y: number; maxX: number }
 
 // Adds a pink handwritten note (a "mark") the agent reads as a message from the user.
 // - One target or none: the note is joined to that shape by a dashed arrow (or floats at `point`).
-// - A selection: a locked dashed box is drawn around all of it and ONE arrow joins the note to the box.
+// - A selection: a dashed box is drawn around all of it and ONE arrow joins the note to the box.
 //   The box is what turns violet when the agent answers (see server replyToMark).
-export function createMark(editor: Editor, targets: TLShape[], point?: VecLike, asSelection = false) {
+//   `reuseRegion`: feedback on a box that already exists: the new note joins that box, which turns pink again.
+export function createMark(editor: Editor, targets: TLShape[], point?: VecLike, asSelection = false, reuseRegion?: TLShapeId) {
 	const boundsOf = (shapes: TLShape[]) => Box.Common(shapes.flatMap((t) => editor.getShapePageBounds(t) ?? []))
 	const targetBox = targets.length > 0 ? boundsOf(targets) : undefined
 
 	let regionId: TLShapeId | undefined
-	if (asSelection && targetBox) {
+	if (reuseRegion && editor.getShape(reuseRegion)) {
+		regionId = reuseRegion
+		editor.updateShape({ id: reuseRegion, type: 'geo', props: { color: 'light-red', dash: 'dashed' } })
+	} else if (asSelection && targetBox) {
 		regionId = createShapeId()
 		const r = padded(targetBox)
-		editor.run(
-			() =>
-				editor.createShape({
-					id: regionId,
-					type: 'geo',
-					x: r.x,
-					y: r.y,
-					isLocked: true,
-					props: { geo: 'rectangle', w: r.w, h: r.h, color: 'light-red', dash: 'dashed', fill: 'none', size: 'm' },
-					meta: { author: 'user', kind: 'region', targetIds: targets.map((t) => t.id) },
-				}),
-			{ ignoreShapeLock: true }
-		)
+		editor.createShape({
+			id: regionId,
+			type: 'geo',
+			x: r.x,
+			y: r.y,
+			props: { geo: 'rectangle', w: r.w, h: r.h, color: 'light-red', dash: 'dashed', fill: 'none', size: 'm' },
+			meta: { author: 'user', kind: 'region', targetIds: targets.map((t) => t.id) },
+		})
 	}
 
 	let origin: { x: number; y: number }
@@ -113,35 +112,61 @@ export function createMark(editor: Editor, targets: TLShape[], point?: VecLike, 
 	editor.setEditingShape(id)
 }
 
-/** Marks whatever is selected right now (right-click menu). Does nothing if nothing markable is selected. */
+const targetsOf = (editor: Editor, region: TLShape) =>
+	(metaOf(region).targetIds ?? []).flatMap((id) => editor.getShape(id as TLShapeId) ?? [])
+
+/**
+ * Marks whatever is selected right now (right-click menu). Does nothing if nothing markable is selected.
+ * A selected box counts as the shapes it surrounds. A box on its own is reused, so feedback on an answered mark
+ * stays on the same box; any other mix gets a new box.
+ */
 export function markSelection(editor: Editor) {
-	const targets = editor.getSelectedShapes().filter(canTarget)
-	if (targets.length > 0) createMark(editor, targets, undefined, true)
+	const selected = editor.getSelectedShapes()
+	const regions = selected.filter(isRegion)
+	const [only] = regions
+	if (only && selected.length === 1) {
+		const targets = targetsOf(editor, only)
+		if (targets.length > 0) return createMark(editor, targets, undefined, true, only.id)
+	}
+	const targets = new Map<TLShapeId, TLShape>()
+	for (const s of selected) {
+		for (const t of isRegion(s) ? targetsOf(editor, s) : canTarget(s) ? [s] : []) targets.set(t.id, t)
+	}
+	if (targets.size > 0) createMark(editor, [...targets.values()], undefined, true)
 }
 
 const REGION_PAD = 12
+// The box is clickable (so you can give feedback on it) but never moves by hand: it always wraps its shapes.
+let refitting = false
+
 const padded = (b: Box) => new Box(b.x - REGION_PAD, b.y - REGION_PAD, b.w + 2 * REGION_PAD, b.h + 2 * REGION_PAD)
 
 // Keeps marks tidy as shapes change:
-// - the selection box refits when a target moves or resizes, and goes away with the last target or its mark;
+// - the selection box refits when a target moves or resizes, and goes away with the last target or its last mark;
 // - a link arrow (mark -> target, reply -> mark) goes away once either end is deleted.
 export function keepMarksTidy(editor: Editor) {
 	const regionsFor = (id: string) => editor.getCurrentPageShapes().filter((s) => isRegion(s) && metaOf(s).targetIds?.includes(id))
 	const refit = (region: TLShape) => {
 		const alive = (metaOf(region).targetIds ?? []).flatMap((id) => editor.getShape(id as TLShapeId) ?? [])
 		const boxes = alive.flatMap((t) => editor.getShapePageBounds(t) ?? [])
-		editor.run(
-			() => {
-				if (boxes.length === 0) return editor.deleteShape(region.id)
-				const r = padded(Box.Common(boxes))
-				const p = region.props as { w: number; h: number }
-				if (r.x !== region.x || r.y !== region.y || r.w !== p.w || r.h !== p.h) {
-					editor.updateShape({ id: region.id, type: 'geo', x: r.x, y: r.y, props: { w: r.w, h: r.h } })
-				}
-			},
-			{ ignoreShapeLock: true }
-		)
+		if (boxes.length === 0) return editor.deleteShape(region.id)
+		const r = padded(Box.Common(boxes))
+		const p = region.props as { w: number; h: number }
+		if (r.x === region.x && r.y === region.y && r.w === p.w && r.h === p.h) return
+		refitting = true
+		try {
+			editor.updateShape({ id: region.id, type: 'geo', x: r.x, y: r.y, props: { w: r.w, h: r.h } })
+		} finally {
+			refitting = false
+		}
 	}
+	// A hand-made move, resize or rotate of the box snaps back; colour and deletion are still allowed.
+	const offGuard = editor.sideEffects.registerBeforeChangeHandler('shape', (prev, next, source) => {
+		if (source !== 'user' || refitting || !isRegion(next)) return next
+		const a = prev.props as { w: number; h: number }
+		const b = next.props as { w: number; h: number }
+		return prev.x === next.x && prev.y === next.y && prev.rotation === next.rotation && a.w === b.w && a.h === b.h ? next : prev
+	})
 	const offChange = editor.sideEffects.registerAfterChangeHandler('shape', (prev, next) => {
 		if (isRegion(next) || next.type === 'arrow') return
 		if (prev.x === next.x && prev.y === next.y && prev.rotation === next.rotation && JSON.stringify(prev.props) === JSON.stringify(next.props)) return
@@ -158,7 +183,9 @@ export function keepMarksTidy(editor: Editor) {
 	const offDelete = editor.sideEffects.registerAfterDeleteHandler('shape', (shape) => {
 		if (isMark(shape)) {
 			const rid = metaOf(shape).regionId as TLShapeId | undefined
-			if (rid && editor.getShape(rid)) editor.run(() => editor.deleteShape(rid), { ignoreShapeLock: true })
+			// Another mark may still use the same box (feedback on an answered mark).
+			const shared = editor.getCurrentPageShapes().some((s) => isMark(s) && metaOf(s).regionId === rid)
+			if (rid && !shared && editor.getShape(rid)) editor.deleteShape(rid)
 		} else if (!isRegion(shape)) {
 			for (const region of regionsFor(shape.id)) refit(region)
 		}
@@ -166,6 +193,7 @@ export function keepMarksTidy(editor: Editor) {
 	})
 	return () => {
 		offChange()
+		offGuard()
 		offDelete()
 	}
 }

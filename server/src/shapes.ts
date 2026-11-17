@@ -294,6 +294,38 @@ export function contentBounds(pageId?: string) {
 
 // ---- Marks -----------------------------------------------------------------------------
 
+// The earlier turns of a conversation, oldest first: what the user wrote, what the agent answered and the box it
+// was about. A mark continues a conversation when it is aimed at one of the agent's replies, or at a box that an
+// earlier, answered mark already used. A chain of replies is followed up to 6 deep.
+function threadOf(mark: TLShape, records: TLRecord[], byId: Map<string, TLRecord>, depth = 6): Record<string, unknown>[] {
+	if (depth === 0) return []
+	const earlier = new Map<string, TLShape>()
+	for (const id of metaOf(mark).targetIds ?? []) {
+		const reply = byId.get(id)
+		const first = reply && isShape(reply) && metaOf(reply).kind === 'agent-reply' ? byId.get(metaOf(reply).replyTo as string) : undefined
+		if (first && isShape(first)) earlier.set(first.id, first)
+	}
+	const regionId = metaOf(mark).regionId
+	if (regionId) {
+		for (const r of records) {
+			if (isShape(r) && r.id !== mark.id && metaOf(r).kind === 'mark' && metaOf(r).regionId === regionId && metaOf(r).answeredBy) earlier.set(r.id, r)
+		}
+	}
+	const turns: Record<string, unknown>[] = []
+	for (const first of [...earlier.values()].sort((a, b) => (a.index < b.index ? -1 : 1))) {
+		const answer = metaOf(first).answeredBy ? byId.get(metaOf(first).answeredBy as string) : undefined
+		const region = metaOf(first).regionId ? byId.get(metaOf(first).regionId as string) : undefined
+		const box = region && isShape(region) ? rectOf(region) : undefined
+		turns.push(...threadOf(first, records, byId, depth - 1), {
+			markId: first.id,
+			user: textOf(first),
+			...(answer && isShape(answer) ? { agent: textOf(answer) } : {}),
+			...(box ? { selection: { x: Math.round(box.x), y: Math.round(box.y), w: Math.round(box.w), h: Math.round(box.h) } } : {}),
+		})
+	}
+	return turns
+}
+
 export function listMarks(status: 'open' | 'answered' | 'all' = 'open') {
 	const records = readAll()
 	const byId = new Map(records.map((r) => [r.id as string, r]))
@@ -307,8 +339,10 @@ export function listMarks(status: 'open' | 'answered' | 'all' = 'open') {
 			const m = metaOf(s)
 			const region = m.regionId ? byId.get(m.regionId) : undefined
 			const box = region && isShape(region) ? rectOf(region) : undefined
+			const thread = threadOf(s, records, byId)
 			return {
 				...describeOne(s, records, byId, bindings),
+				...(thread.length > 0 ? { thread } : {}),
 				...(box ? { selection: { x: Math.round(box.x), y: Math.round(box.y), w: Math.round(box.w), h: Math.round(box.h) } } : {}),
 				targets: (m.targetIds ?? [])
 					.map((id) => byId.get(id))
