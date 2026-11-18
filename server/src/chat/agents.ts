@@ -3,12 +3,14 @@ import { codexDriver, detectCodex } from './codex.ts'
 import { AGENTS, type AgentId, type Detected, type DriverFactory } from './driver.ts'
 import { detectOmp, ompDriver } from './omp.ts'
 import { detectOpencode, opencodeDriver } from './opencode.ts'
+import { detectPi, piDriver } from './pi.ts'
 
 const DEFS: Record<AgentId, { label: string; detect: () => Promise<Detected>; create: DriverFactory }> = {
 	omp: { label: 'omp', detect: detectOmp, create: ompDriver },
 	claude: { label: 'Claude Code', detect: detectClaude, create: claudeDriver },
 	codex: { label: 'Codex', detect: detectCodex, create: codexDriver },
 	opencode: { label: 'opencode', detect: detectOpencode, create: opencodeDriver },
+	pi: { label: 'pi', detect: detectPi, create: piDriver },
 }
 
 export const createDriver = (id: AgentId, ...args: Parameters<DriverFactory>) => DEFS[id].create(...args)

@@ -12,6 +12,7 @@ export const OMP_BIN = process.env.OMP_BIN ?? 'omp'
 export const CLAUDE_BIN = process.env.CLAUDE_BIN ?? 'claude'
 export const CODEX_BIN = process.env.CODEX_BIN ?? 'codex'
 export const OPENCODE_BIN = process.env.OPENCODE_BIN ?? 'opencode'
+export const PI_BIN = process.env.PI_BIN ?? 'pi'
 export const WEB_DIST = resolve(import.meta.dirname, '../../web/dist')
 // Host headers we accept (DNS-rebinding protection). Add more via ALLOWED_HOSTS=a,b
 export const ALLOWED_HOSTS = new Set([

@@ -26,7 +26,7 @@ export type Usage = {
 type CurrentModel = { provider: string; id: string; name: string }
 export type { Attachment }
 
-export type AgentId = 'omp' | 'claude' | 'codex' | 'opencode'
+export type AgentId = 'omp' | 'claude' | 'codex' | 'opencode' | 'pi'
 export type AgentInfo = { id: AgentId; label: string } & ({ ok: true; version: string } | { ok: false; message: string })
 
 // 'off': no chat here (a Docker server cannot reach the user's agent CLIs). 'locked': native server, but this browser

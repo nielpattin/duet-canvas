@@ -33,6 +33,7 @@ Environment:
   CLAUDE_BIN    Path to the Claude Code binary for the agent chat (default: claude)
   CODEX_BIN     Path to the Codex binary for the agent chat (default: codex)
   OPENCODE_BIN  Path to the opencode binary for the agent chat (default: opencode)
+  PI_BIN        Path to the pi binary for the agent chat (default: pi)
 
 Data dir: ${dir}`
 

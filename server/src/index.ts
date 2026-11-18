@@ -67,7 +67,7 @@ app.get('/api/chat/status', async (c) => {
 	if (!tokenOk(getCookie(c, CHAT_COOKIE))) return c.json({ kind: 'locked' })
 	const agents = await detectAgents()
 	if (agents.some((a) => a.ok)) return c.json({ kind: 'ready', agents })
-	return c.json({ kind: 'no-agent', message: 'No chat agent found. Install omp, Claude Code, Codex or opencode (or set OMP_BIN, CLAUDE_BIN, CODEX_BIN, OPENCODE_BIN).', agents })
+	return c.json({ kind: 'no-agent', message: 'No chat agent found. Install omp, Claude Code, Codex, opencode or pi (or set OMP_BIN, CLAUDE_BIN, CODEX_BIN, OPENCODE_BIN, PI_BIN).', agents })
 })
 
 // Swaps the code from the unlock link (or pasted into the chat panel) for the cookie.

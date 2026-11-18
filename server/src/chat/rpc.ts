@@ -1,6 +1,4 @@
-import { spawn, type ChildProcessByStdio } from 'node:child_process'
-import { createInterface } from 'node:readline'
-import type { Readable, Writable } from 'node:stream'
+import type { Child } from './proc.ts'
 
 export type Frame = { type: string } & Record<string, any>
 
@@ -9,21 +7,21 @@ type Chunks = { id: string; count: number; byteLength: number; parts: Buffer[] }
 
 const MAX_REASSEMBLED = 64 * 1024 * 1024
 
-// JSONL client for `omp --mode rpc` (omp://rpc.md). Not JSON-RPC: responses carry the request `id`,
-// everything else is an event handed to `onFrame`.
-export class OmpRpc {
+// JSONL client for `omp --mode rpc` (omp://rpc.md) and `pi --mode rpc`, which speak the same shape. Not JSON-RPC:
+// responses carry the request `id`, everything else is an event handed to `onFrame`.
+export class JsonlRpc {
 	closed = false
-	#child: ChildProcessByStdio<Writable, Readable, null>
+	#child: Child
+	#name: string
 	#pending = new Map<string, Pending>()
 	#seq = 0
 	#chunks: Chunks | undefined
 	#onFrame: (f: Frame) => void
 
-	constructor(bin: string, args: string[], cwd: string, onFrame: (f: Frame) => void, onClose: (reason: string) => void) {
-		this.#onFrame = onFrame
-		// windowsHide: the daemon has no console, so on Windows omp would otherwise open a terminal window of its own.
-		const child = spawn(bin, args, { cwd, stdio: ['pipe', 'pipe', 'inherit'], windowsHide: true })
+	constructor(child: Child, name: string, onFrame: (f: Frame) => void, onClose: (reason: string) => void) {
 		this.#child = child
+		this.#name = name
+		this.#onFrame = onFrame
 		const close = (reason: string) => {
 			if (this.closed) return
 			this.closed = true
@@ -34,29 +32,36 @@ export class OmpRpc {
 			this.#pending.clear()
 			onClose(reason)
 		}
-		child.on('error', (e) => close(`Could not start omp: ${e.message}`))
-		child.on('exit', (code) => close(`omp exited (code ${code})`))
+		child.on('error', (e) => close(`Could not start ${name}: ${e.message}`))
+		child.on('exit', (code) => close(`${name} exited (code ${code})`))
 		child.stdin.on('error', () => {}) // a write after exit surfaces through 'exit'
-		createInterface({ input: child.stdout }).on('line', (line) => this.#line(line))
-		// First thing in the pipe: protocol v2 sends oversized frames (tool results with images) as rpc_chunk
-		// sequences instead of cutting them. An omp without v2 answers with an error and we stay on v1.
-		this.request('negotiate_protocol', { protocolVersion: 2 }).catch(() => {})
+		child.stderr.pipe(process.stderr)
+		// Records end at LF only: a JSON string may hold U+2028, which a generic line reader would cut at.
+		let buf = ''
+		child.stdout.setEncoding('utf8')
+		child.stdout.on('data', (d: string) => {
+			buf += d
+			for (let i = buf.indexOf('\n'); i >= 0; i = buf.indexOf('\n')) {
+				this.#line(buf.slice(0, i).replace(/\r$/, ''))
+				buf = buf.slice(i + 1)
+			}
+		})
 	}
 
 	request<T = any>(type: string, params: Record<string, unknown> = {}, timeoutMs = 30_000): Promise<T> {
-		if (this.closed) return Promise.reject(new Error('omp is not running'))
+		if (this.closed) return Promise.reject(new Error(`${this.#name} is not running`))
 		const id = `r${++this.#seq}`
 		const { promise, resolve, reject } = Promise.withResolvers<T>()
 		const timer = setTimeout(() => {
 			this.#pending.delete(id)
-			reject(new Error(`omp did not answer "${type}" in time`))
+			reject(new Error(`${this.#name} did not answer "${type}" in time`))
 		}, timeoutMs)
 		this.#pending.set(id, { resolve, reject, timer })
 		this.#child.stdin.write(JSON.stringify({ id, type, ...params }) + '\n')
 		return promise
 	}
 
-	// Closing stdin is omp's graceful shutdown: it finishes pending work and exits.
+	// Closing stdin is the graceful shutdown: the agent finishes pending work and exits.
 	close() {
 		this.#child.stdin.end()
 	}

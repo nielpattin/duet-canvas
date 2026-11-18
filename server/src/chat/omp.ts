@@ -4,8 +4,8 @@ import { OMP_BIN } from '../config.ts'
 import { SESSIONS } from './chats.ts'
 import type { ChatDriver, Detected, DriverEvents, DriverFactory, DriverState, ModelInfo, PrefsStore, PromptInput, Restored } from './driver.ts'
 import { userMcpServerNames } from './mcpGuard.ts'
-import { detectCli } from './proc.ts'
-import { OmpRpc, type Frame } from './rpc.ts'
+import { detectCli, launch } from './proc.ts'
+import { JsonlRpc, type Frame } from './rpc.ts'
 import { attachmentNote, toWire, type WireMessage } from './wire.ts'
 import { CANVAS_MCP_URL, SYSTEM_PROMPT, WORKSPACE } from './workspace.ts'
 
@@ -41,7 +41,7 @@ function prepareWorkspace() {
 // One `omp --mode rpc` process (started on first use, kept alive). omp keeps the sessions, so this is a thin translation.
 export class OmpDriver implements ChatDriver {
 	closed = false
-	#rpc!: OmpRpc
+	#rpc!: JsonlRpc
 	#running = false
 
 	#ev: DriverEvents
@@ -54,11 +54,14 @@ export class OmpDriver implements ChatDriver {
 
 	async start() {
 		prepareWorkspace()
-		this.#rpc = new OmpRpc(OMP_BIN, OMP_ARGS, WORKSPACE, (f) => this.#onFrame(f), (reason) => {
+		this.#rpc = new JsonlRpc(launch(OMP_BIN, OMP_ARGS, { cwd: WORKSPACE }), 'omp', (f) => this.#onFrame(f), (reason) => {
 			this.closed = true
 			this.#running = false
 			this.#ev.closed(reason)
 		})
+		// First thing in the pipe: protocol v2 sends oversized frames (tool results with images) as rpc_chunk sequences
+		// instead of cutting them. An omp without v2 answers with an error and we stay on v1.
+		this.#rpc.request('negotiate_protocol', { protocolVersion: 2 }).catch(() => {})
 		await this.#rpc.request('set_event_filter', { events: EVENTS, messageUpdates: 'full' })
 		await this.#applyPrefs()
 	}

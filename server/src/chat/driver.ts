@@ -2,7 +2,7 @@ import type { WireMessage } from './wire.ts'
 
 // One chat agent behind the browser chat. The hub owns sockets, the chat index and preferences; a driver owns one
 // agent CLI (omp, Claude Code, Codex, opencode) and turns its protocol into this small surface.
-export const AGENTS = ['omp', 'claude', 'codex', 'opencode'] as const
+export const AGENTS = ['omp', 'claude', 'codex', 'opencode', 'pi'] as const
 export type AgentId = (typeof AGENTS)[number]
 
 export type ModelInfo = { provider: string; id: string; name: string; image: boolean }

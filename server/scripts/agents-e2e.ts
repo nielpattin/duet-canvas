@@ -32,6 +32,7 @@ const { values: opt } = parseArgs({
 const MODELS: Record<AgentId, { provider: string; id: string; label: string }> = {
 	omp: { provider: 'opencode-go', id: 'deepseek-v4.1-flash', label: 'opencode-go/deepseek-v4.1-flash' },
 	opencode: { provider: 'opencode-go', id: 'opencode-go/deepseek-v4.1-flash', label: 'opencode-go/deepseek-v4.1-flash' },
+	pi: { provider: 'opencode-go', id: 'deepseek-v4.1-flash', label: 'opencode-go/deepseek-v4.1-flash' },
 	claude: { provider: 'anthropic', id: 'haiku', label: 'haiku' },
 	codex: { provider: 'openai', id: 'gpt-6-luna', label: 'gpt-6-luna' },
 }
@@ -412,7 +413,7 @@ const pick = <T extends string>(arg: string | undefined, all: readonly T[], what
 	return wanted as T[]
 }
 
-const agents = pick<AgentId>(opt.agent, ['omp', 'opencode', 'claude', 'codex'], 'agent')
+const agents = pick<AgentId>(opt.agent, ['omp', 'opencode', 'pi', 'claude', 'codex'], 'agent')
 const scenarios = pick(opt.scenario, SCENARIOS.map((s) => s.id), 'scenario').map((id) => SCENARIOS.find((s) => s.id === id)!)
 const outcomes: Outcome[] = []
 
