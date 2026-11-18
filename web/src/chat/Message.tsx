@@ -44,6 +44,8 @@ export const Message = memo(function Message({ message, tools }: { message: Wire
 			{message.blocks.map((b, i) => {
 				if (b.type === 'text') return b.text && <Md key={i} text={b.text} />
 				if (b.type === 'thinking') {
+					// Claude Code, Codex and opencode often send thinking without readable text; an empty block is just noise.
+					if (!b.text.trim()) return null
 					return (
 						<details key={i} className="chat-thinking">
 							<summary>Thinking</summary>
