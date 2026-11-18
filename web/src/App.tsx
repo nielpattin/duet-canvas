@@ -1,6 +1,8 @@
 import { useSync } from '@tldraw/sync'
 import {
 	defaultShapeUtils,
+	getSnapshot,
+	loadSnapshot,
 	DefaultContextMenu,
 	DefaultContextMenuContent,
 	DefaultToolbar,
@@ -93,7 +95,27 @@ function SharePanel() {
 
 const components: TLComponents = { SharePanel, Toolbar, ContextMenu, InFrontOfTheCanvas: AgentBadges }
 
+// Per-user session state (current page, camera, grid...) stays in this browser; the server owns the document.
+const SESSION_KEY = 'canvas-idea:session'
+
+function restoreSession(editor: Editor) {
+	const saved = localStorage.getItem(SESSION_KEY)
+	try {
+		if (!saved) throw new Error('no saved session')
+		loadSnapshot(editor.store, { session: JSON.parse(saved) }, { forceOverwriteSessionState: true })
+		// The saved page may have been deleted since.
+		if (!editor.getPage(editor.getCurrentPageId())) editor.setCurrentPage(editor.getPages()[0]!.id)
+	} catch {
+		editor.updateInstanceState({ isGridMode: true })
+	}
+}
+
 function onMount(editor: Editor) {
+	restoreSession(editor)
+	const stopSession = editor.store.listen(
+		() => localStorage.setItem(SESSION_KEY, JSON.stringify(getSnapshot(editor.store).session)),
+		{ scope: 'session', source: 'user' }
+	)
 	const stopPush = pushContextToServer(editor)
 	const stopRules = reopenEditedMarks(editor)
 	const stopTidy = keepMarksTidy(editor)
@@ -110,6 +132,7 @@ function onMount(editor: Editor) {
 		window.removeEventListener('keydown', blockSave, true)
 		setBridgeEditor(null)
 		stopTheme()
+		stopSession()
 		stopPush()
 		stopRules()
 		stopTidy()
