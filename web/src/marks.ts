@@ -110,6 +110,7 @@ export function createMark(editor: Editor, targets: TLShape[], point?: VecLike, 
 	}
 
 	editor.select(id)
+	editor.zoomToSelectionIfOffscreen(64, { animation: { duration: 200 } })
 	editor.setEditingShape(id)
 }
 
