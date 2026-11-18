@@ -18,7 +18,7 @@ const THREAD = {
 	sandbox: 'read-only',
 	approvalPolicy: 'never',
 	config: {
-		'mcp_servers.canvas': { url: CANVAS_MCP_URL, default_tools_approval_mode: 'approve' },
+		'mcp_servers.duet-canvas': { url: CANVAS_MCP_URL, default_tools_approval_mode: 'approve' },
 		web_search: 'disabled',
 		'features.apps': false,
 		'features.browser_use': false,
@@ -69,7 +69,7 @@ export class CodexDriver extends SessionDriver {
 				this.ev.closed(reason)
 			},
 		})
-		await this.#rpc.request('initialize', { clientInfo: { name: 'canvas-idea', title: 'canvas-idea', version: '0.1.0' } })
+		await this.#rpc.request('initialize', { clientInfo: { name: 'duet-canvas', title: 'duet-canvas', version: '0.1.0' } })
 		this.#rpc.notify('initialized')
 		await this.#loadModels()
 	}
@@ -175,7 +175,7 @@ export class CodexDriver extends SessionDriver {
 	}
 
 	#notify(method: string, p: Record<string, any>) {
-		if (method === 'mcpServer/startupStatus/updated' && p.name === 'canvas') {
+		if (method === 'mcpServer/startupStatus/updated' && p.name === 'duet-canvas') {
 			this.#canvas.set(p.threadId, { status: p.status, error: p.error ?? undefined })
 			if (p.status !== 'starting') this.#canvasReady.get(p.threadId)?.()
 			return

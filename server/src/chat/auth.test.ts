@@ -19,7 +19,7 @@ test('a rotated or rewritten token file kills the old token on the next check', 
 	assert.ok(tokenOk(second))
 	assert.ok(!tokenOk(first), 'the old token still works after rotateToken')
 
-	// `canvas-idea rotate` is another process: a running server must see its write without a restart.
+	// `duet-canvas rotate` is another process: a running server must see its write without a restart.
 	const external = 'f'.repeat(64)
 	writeFileSync(join(dir, 'chat-token'), external)
 	assert.ok(tokenOk(external))

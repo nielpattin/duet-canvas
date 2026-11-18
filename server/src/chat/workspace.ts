@@ -25,5 +25,5 @@ How to work
 - Be direct and honest. If something cannot be done with your tools, say so plainly. No flattery, no apologies, no emojis unless the user uses them.
 `.trim()
 
-// omp names MCP tools mcp__canvas_<tool>; the browser strips that prefix, so every driver reports names this way.
+// omp names MCP tools mcp__duet-canvas_<tool>; the browser strips that prefix, so every driver reports names this way.
 export const toolName = (server: string, tool: string) => `mcp__${server}_${tool}`

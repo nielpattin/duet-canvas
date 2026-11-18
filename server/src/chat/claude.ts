@@ -35,7 +35,7 @@ export class ClaudeDriver extends SessionDriver {
 
 	async start() {
 		mkdirSync(WORKSPACE, { recursive: true })
-		writeFileSync(MCP_FILE, JSON.stringify({ mcpServers: { canvas: { type: 'http', url: CANVAS_MCP_URL } } }))
+		writeFileSync(MCP_FILE, JSON.stringify({ mcpServers: { 'duet-canvas': { type: 'http', url: CANVAS_MCP_URL } } }))
 		writeFileSync(PROMPT_FILE, SYSTEM_PROMPT)
 		this.model ??= { provider: 'anthropic', id: 'default', name: 'Default' }
 	}
@@ -60,7 +60,7 @@ export class ClaudeDriver extends SessionDriver {
 	protected async runTurn(turn: Turn) {
 		const args = [
 			'-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--include-partial-messages',
-			'--tools', '', '--strict-mcp-config', '--mcp-config', MCP_FILE, '--allowedTools', 'mcp__canvas', '--permission-mode', 'dontAsk',
+			'--tools', '', '--strict-mcp-config', '--mcp-config', MCP_FILE, '--allowedTools', 'mcp__duet-canvas', '--permission-mode', 'dontAsk',
 			'--system-prompt-file', PROMPT_FILE, '--setting-sources', '', '--disable-slash-commands',
 		]
 		if (this.model && this.model.id !== 'default') args.push('--model', this.model.id)
@@ -123,7 +123,7 @@ export class ClaudeDriver extends SessionDriver {
 						if (!parts) break
 						if (b.type === 'text') parts[e.index] = { type: 'text', text: b.text ?? '' }
 						else if (b.type === 'thinking') parts[e.index] = { type: 'thinking', text: b.thinking ?? '' }
-						else if (b.type === 'tool_use') parts[e.index] = { type: 'tool', id: b.id, name: toolName('canvas', String(b.name).replace(/^mcp__canvas__/, '')), json: '' }
+						else if (b.type === 'tool_use') parts[e.index] = { type: 'tool', id: b.id, name: toolName('duet-canvas', String(b.name).replace(/^mcp__duet-canvas__/, '')), json: '' }
 						emit(id, false)
 					} else if (e.type === 'content_block_delta') {
 						const p = live.get(id)?.[e.index]

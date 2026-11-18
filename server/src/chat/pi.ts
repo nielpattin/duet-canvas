@@ -31,7 +31,7 @@ function prepareWorkspace() {
 	// A project entry that only says `enabled: false` switches off a user-level server of the same name.
 	const servers: Record<string, unknown> = {}
 	for (const name of userMcpServerNames(piAgentDir())) servers[name] = { enabled: false }
-	servers.canvas = { url: CANVAS_MCP_URL, exposure: 'direct' }
+	servers['duet-canvas'] = { url: CANVAS_MCP_URL, exposure: 'direct' }
 	writeFileSync(join(DIR, '.pi', 'mcp.json'), JSON.stringify({ mcpServers: servers }))
 	writeFileSync(join(DIR, '.pi', 'APPEND_SYSTEM.md'), '')
 	writeFileSync(PROMPT_FILE, SYSTEM_PROMPT)

@@ -33,7 +33,7 @@ function prepareWorkspace() {
 	mkdirSync(SESSIONS, { recursive: true })
 	const servers: Record<string, unknown> = {}
 	for (const name of userMcpServerNames()) servers[name] = { type: 'http', url: 'http://127.0.0.1:9/disabled', enabled: false }
-	servers.canvas = { type: 'http', url: CANVAS_MCP_URL, enabled: true }
+	servers['duet-canvas'] = { type: 'http', url: CANVAS_MCP_URL, enabled: true }
 	writeFileSync(join(WORKSPACE, '.omp', 'mcp.json'), JSON.stringify({ mcpServers: servers }))
 	writeFileSync(CONFIG, 'tools:\n  xdev: false\n')
 }
@@ -132,7 +132,7 @@ export class OmpDriver implements ChatDriver {
 			queue: { steering: s.queuedMessages?.steering ?? [], followUp: s.queuedMessages?.followUp ?? [] },
 			usage: { cost: stats.cost ?? 0, tokens: stats.tokens ?? {}, context: stats.contextUsage ?? null },
 			// Anything beyond the canvas tools means a server from the user's own omp config got through mcpGuard.
-			extraTools: ((s.dumpTools ?? []) as { name: string }[]).map((t) => t.name).filter((n) => !n.startsWith('mcp__canvas_')),
+			extraTools: ((s.dumpTools ?? []) as { name: string }[]).map((t) => t.name).filter((n) => !n.startsWith('mcp__duet-canvas_')),
 			current: s.sessionId && s.sessionFile ? { id: s.sessionId, file: s.sessionFile } : undefined,
 		}
 	}

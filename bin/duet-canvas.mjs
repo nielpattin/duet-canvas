@@ -8,9 +8,9 @@ import { resolveDataDir } from '../server/src/dataDir.ts'
 const root = resolve(import.meta.dirname, '..')
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
 
-const usage = (dir = resolveDataDir()) => `canvas-idea ${pkg.version} — local tldraw canvas + MCP server
+const usage = (dir = resolveDataDir()) => `duet-canvas ${pkg.version} — local tldraw canvas + MCP server
 
-Usage: canvas-idea [command] [options]
+Usage: duet-canvas [command] [options]
 
 Commands:
   start     Start the server (default); if it already runs, print the unlock link
@@ -136,7 +136,7 @@ const start = async () => {
 }
 
 const startDetached = async () => {
-	const log = join(dataDir, 'canvas-idea.log')
+	const log = join(dataDir, 'duet-canvas.log')
 	mkdirSync(dataDir, { recursive: true })
 	const out = openSync(log, 'a')
 	const child = spawn(

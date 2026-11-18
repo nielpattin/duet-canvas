@@ -128,7 +128,7 @@ const httpServer = serve({ fetch: app.fetch, port: PORT, hostname: HOST }, (info
 	console.log(`canvas  http://${HOST}:${info.port}`)
 	console.log(`mcp     http://${HOST}:${info.port}/mcp`)
 	// The link that unlocks the agent chat in a browser (it swaps the code for a cookie on first visit).
-	// Not when stdout is a file (the detached CLI's log): `canvas-idea url` prints it.
+	// Not when stdout is a file (the detached CLI's log): `duet-canvas url` prints it.
 	if (chat) console.log(`chat    http://${HOST === '0.0.0.0' ? '127.0.0.1' : HOST}:${info.port}/${process.stdout.isTTY ? `?chat=${chatToken()}` : ''}`)
 })
 

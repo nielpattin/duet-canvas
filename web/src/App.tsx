@@ -95,10 +95,11 @@ function SharePanel() {
 const components: TLComponents = { SharePanel, Toolbar, ContextMenu, InFrontOfTheCanvas: AgentBadges }
 
 // Per-user session state (current page, camera, grid...) stays in this browser; the server owns the document.
-const SESSION_KEY = 'canvas-idea:session'
+const SESSION_KEY = 'duet-canvas:session'
 
 function restoreSession(editor: Editor) {
-	const saved = localStorage.getItem(SESSION_KEY)
+	// The old key keeps an existing user's grid and camera across the rename.
+	const saved = localStorage.getItem(SESSION_KEY) ?? localStorage.getItem('canvas-idea:session')
 	try {
 		if (!saved) throw new Error('no saved session')
 		loadSnapshot(editor.store, { session: JSON.parse(saved) }, { forceOverwriteSessionState: true })

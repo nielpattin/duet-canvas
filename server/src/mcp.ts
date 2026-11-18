@@ -115,7 +115,7 @@ const MAX_DOWNLOAD_BYTES = 100 * 1024 * 1024
 
 async function download(url: string): Promise<Buffer> {
 	if (!/^https?:/i.test(url)) throw new Error('Only http(s) URLs can be downloaded')
-	const res = await fetch(url, { signal: AbortSignal.timeout(60_000), headers: { 'User-Agent': 'Mozilla/5.0 canvas-mcp' } })
+	const res = await fetch(url, { signal: AbortSignal.timeout(60_000), headers: { 'User-Agent': 'Mozilla/5.0 duet-canvas' } })
 	if (!res.ok) throw new Error(`Download failed: HTTP ${res.status}`)
 	const declared = Number(res.headers.get('content-length') ?? 0)
 	if (declared > MAX_DOWNLOAD_BYTES) throw new Error(`File is ${(declared / 1048576).toFixed(0)} MB, over the 100 MB limit`)
@@ -137,7 +137,7 @@ function intersects(
 
 // Stateless: a fresh server per request. All state lives in the room, not in MCP sessions.
 export function buildMcpServer(origin: string) {
-	const server = new McpServer({ name: 'canvas', version: '0.4.0' }, { instructions: instructionsFor(origin) })
+	const server = new McpServer({ name: 'duet-canvas', version: '0.4.0' }, { instructions: instructionsFor(origin) })
 
 	server.registerTool(
 		'get_context',

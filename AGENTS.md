@@ -2,7 +2,7 @@
 
 ## After every change: rebuild
 
-The server serves the built `web/dist`, and `canvas-idea start` only builds it when it is missing. After changing anything under `web/`, rebuild it:
+The server serves the built `web/dist`, and `duet-canvas start` only builds it when it is missing. After changing anything under `web/`, rebuild it:
 
 ```sh
 pnpm -r typecheck

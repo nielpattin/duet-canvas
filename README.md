@@ -1,4 +1,4 @@
-# canvas-idea
+# duet-canvas
 
 A local tldraw canvas that you use in the browser **and** your coding agent edits over MCP.
 The server owns the canvas (SQLite), so the agent can read and edit it with the browser closed.
@@ -6,6 +6,8 @@ The server owns the canvas (SQLite), so the agent can read and edit it with the 
 Any MCP client (Claude Code, omp, ...) can connect to it. The web app also has a built-in chat panel that drives [omp](https://github.com/can1357/oh-my-pi), Claude Code, Codex, opencode or pi, whichever you pick. You draw, mark things you want help with, and the agent answers next to them on the canvas.
 
 Status: early (0.1). Expect rough edges. It is a local, single-user tool.
+
+![The canvas with the Agent chat panel open: a diagram, a pink mark answered by the agent, and a note the agent drew](docs/screenshot.png)
 
 ```
 agent --MCP (HTTP)--> server (TLSocketRoom + SQLite) <--WebSocket-- browser (normal tldraw)
@@ -22,7 +24,7 @@ agent --MCP (HTTP)--> server (TLSocketRoom + SQLite) <--WebSocket-- browser (nor
 ## Run
 
 ```sh
-git clone <this repo> && cd canvas-idea
+git clone <this repo> && cd duet-canvas
 pnpm install
 pnpm dev          # web http://localhost:5173 (use this one), server on :5858
 # or production-style:
@@ -36,7 +38,7 @@ docker compose up --build
 The web app has an **Agent chat** panel that drives your own agent CLI. The agent's name at the top left of the panel is a dropdown: pick omp, Claude Code, Codex, opencode or pi (CLIs that are not found are listed greyed out). Each must be on your `PATH`, or set `OMP_BIN`, `CLAUDE_BIN`, `CODEX_BIN`, `OPENCODE_BIN`, `PI_BIN`. The server starts the CLI on first use; the choice, and each agent's last model and effort, are remembered.
 
 ```
-browser --WS /chat?token--> server --stdio--> omp --mode rpc            --MCP http--> server (canvas)
+browser --WS /chat?token--> server --stdio--> omp --mode rpc            --MCP http--> server (duet-canvas)
                                          |--> claude -p (one process per turn, stream-json)
                                          |--> codex app-server (JSON-RPC)
                                          |--> opencode acp (Agent Client Protocol)
@@ -48,16 +50,16 @@ browser --WS /chat?token--> server --stdio--> omp --mode rpc            --MCP ht
 ### Run it with the CLI
 
 ```sh
-pnpm add -g .            # once, from this repo: puts `canvas-idea` on your PATH (pnpm 12 has no `link --global`)
-canvas-idea              # start in the foreground and print the unlock link
-canvas-idea start -d     # run in the background (log: <data dir>/canvas-idea.log)
-canvas-idea status | stop | url | token | rotate
-canvas-idea start --port 5859 --data-dir D:\canvas
+pnpm add -g .            # once, from this repo: puts `duet-canvas` on your PATH (pnpm 12 has no `link --global`)
+duet-canvas              # start in the foreground and print the unlock link
+duet-canvas start -d     # run in the background (log: <data dir>/duet-canvas.log)
+duet-canvas status | stop | url | token | rotate
+duet-canvas start --port 5859 --data-dir D:\canvas
 ```
 
-`start` builds `web/dist` if it is missing and prints a link ending in `?chat=<token>`. Open that link once (or paste it, or the bare `canvas-idea token`, into the locked chat panel) and the server gives the browser an HttpOnly cookie. Cookies ignore the port, so one unlock also covers the Vite dev server on the same host (`localhost` and `127.0.0.1` count as different hosts). Without it the chat shows "locked" and `/chat` refuses the socket. The token lives in `<data dir>/chat-token`.
+`start` builds `web/dist` if it is missing and prints a link ending in `?chat=<token>`. Open that link once (or paste it, or the bare `duet-canvas token`, into the locked chat panel) and the server gives the browser an HttpOnly cookie. Cookies ignore the port, so one unlock also covers the Vite dev server on the same host (`localhost` and `127.0.0.1` count as different hosts). Without it the chat shows "locked" and `/chat` refuses the socket. The token lives in `<data dir>/chat-token`.
 
-**If the token or its link leaks** (a screenshot, a shared terminal or log), run `canvas-idea rotate`. It writes a new token; the running server reads the file on every check, so the old token stops working at once without a restart: old links, browsers' saved unlock and open chats are cut (the panel shows "locked" until you open the new link, which `canvas-idea url` prints again). Deleting `<data dir>/chat-token` by hand does the same. `start -d` keeps the token out of `canvas-idea.log` (run `canvas-idea url` for the link); entries from older versions are dead after a rotate.
+**If the token or its link leaks** (a screenshot, a shared terminal or log), run `duet-canvas rotate`. It writes a new token; the running server reads the file on every check, so the old token stops working at once without a restart: old links, browsers' saved unlock and open chats are cut (the panel shows "locked" until you open the new link, which `duet-canvas url` prints again). Deleting `<data dir>/chat-token` by hand does the same. `start -d` keeps the token out of `duet-canvas.log` (run `duet-canvas url` for the link); entries from older versions are dead after a rotate.
 
 ### What it does
 
@@ -83,7 +85,7 @@ canvas-idea start --port 5859 --data-dir D:\canvas
 ```json
 {
   "mcpServers": {
-    "canvas": { "type": "http", "url": "http://127.0.0.1:5858/mcp", "enabled": true }
+    "duet-canvas": { "type": "http", "url": "http://127.0.0.1:5858/mcp", "enabled": true }
   }
 }
 ```
@@ -91,13 +93,13 @@ canvas-idea start --port 5859 --data-dir D:\canvas
 **Claude Code:**
 
 ```sh
-claude mcp add --transport http canvas http://localhost:5858/mcp
+claude mcp add --transport http duet-canvas http://localhost:5858/mcp
 ```
 
 **Codex:**
 
 ```sh
-codex mcp add canvas --url http://localhost:5858/mcp
+codex mcp add duet-canvas --url http://localhost:5858/mcp
 ```
 
 **OpenCode:** add this to `opencode.json` in your project (or your global OpenCode config):
@@ -105,7 +107,7 @@ codex mcp add canvas --url http://localhost:5858/mcp
 ```json
 {
   "mcp": {
-    "canvas": { "type": "remote", "url": "http://localhost:5858/mcp", "enabled": true }
+    "duet-canvas": { "type": "remote", "url": "http://localhost:5858/mcp", "enabled": true }
   }
 }
 ```
@@ -147,14 +149,14 @@ The shape is defined twice, in `server/src/mediaCard.ts` and `web/src/mediaCard.
 ## Data
 
 Your OS data dir, or `DATA_DIR` (`/data` in Docker): `canvas.db` (document), `ui-context.json` (last selection/viewport), `uploads/`, and for the chat `sessions/` and `workspace/`.
-The default is `%APPDATA%\canvas-idea` on Windows, `~/Library/Application Support/canvas-idea` on macOS and `$XDG_DATA_HOME` (or `~/.local/share`)`/canvas-idea` on Linux. It used to be `.data/` next to where you ran the server: move it over to keep an old canvas.
+The default is `%APPDATA%\duet-canvas` on Windows, `~/Library/Application Support/duet-canvas` on macOS and `$XDG_DATA_HOME` (or `~/.local/share`)`/duet-canvas` on Linux. Before the rename from canvas-idea the folder was called `canvas-idea`: if it exists and `duet-canvas` does not, it is still used. It used to be `.data/` next to where you ran the server: move it over to keep an old canvas.
 
 ## Security
 
 Binds to 127.0.0.1 and rejects unknown `Host` headers and cross-origin requests. Extra hosts: `ALLOWED_HOSTS=a.local,b.local`.
 
 - **The MCP endpoint (`/mcp`) and the canvas have no auth.** Anyone who can reach the port can read and edit the canvas. Do not expose it beyond localhost without putting authentication in front of it (the Docker compose file publishes the port on loopback only).
-- **The chat is protected by a token** (see above), because it drives an agent on your machine. Never share the unlock link; run `canvas-idea rotate` if it leaks.
+- **The chat is protected by a token** (see above), because it drives an agent on your machine. Never share the unlock link; run `duet-canvas rotate` if it leaks.
 - The chat agent runs with `--yolo` but only has the canvas tools. Your own omp MCP servers are switched off for it.
 
 ## Development
@@ -165,10 +167,10 @@ pnpm --filter server test      # server unit tests
 pnpm --filter web build        # rebuild web/dist (the server serves the built files)
 ```
 
-`server/` is the Hono + MCP + tldraw sync server, `web/` is the Vite/React app, `bin/` is the `canvas-idea` CLI.
+`server/` is the Hono + MCP + tldraw sync server, `web/` is the Vite/React app, `bin/` is the `duet-canvas` CLI.
 
 ## License
 
-canvas-idea is [MIT](LICENSE).
+duet-canvas is [MIT](LICENSE).
 
 [tldraw](https://tldraw.dev), which it is built on, is not open source and has its own license. Its SDK needs a license for production use; without a key it shows a "Made with tldraw" watermark. See the [tldraw license](https://github.com/tldraw/tldraw/blob/main/LICENSE.md) before you deploy this or build on it. This repo does not include a tldraw license key.

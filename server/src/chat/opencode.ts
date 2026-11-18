@@ -11,11 +11,11 @@ import { clip, type WireBlock } from './wire.ts'
 export const detectOpencode = (): Promise<Detected> => detectCli('opencode', OPENCODE_BIN, 'OPENCODE_BIN')
 
 const AGENT = 'canvas'
-const SESSION = { cwd: WORKSPACE, mcpServers: [{ type: 'http', name: 'canvas', url: CANVAS_MCP_URL, headers: [] }] }
+const SESSION = { cwd: WORKSPACE, mcpServers: [{ type: 'http', name: 'duet-canvas', url: CANVAS_MCP_URL, headers: [] }] }
 const PROMPT_TIMEOUT = 12 * 3600_000
 
 // The agent's own definition, read from the workspace as project config: our system prompt, and permissions that deny
-// every tool except the canvas MCP server's (opencode names those canvas_<tool>).
+// every tool except the canvas MCP server's (opencode names those duet-canvas_<tool>).
 const CONFIG = {
 	$schema: 'https://opencode.ai/config.json',
 	default_agent: AGENT,
@@ -26,7 +26,7 @@ const CONFIG = {
 			system: SYSTEM_PROMPT,
 			permissions: [
 				{ action: '*', resource: '*', effect: 'deny' },
-				{ action: 'canvas_*', resource: '*', effect: 'allow' },
+				{ action: 'duet-canvas_*', resource: '*', effect: 'allow' },
 			],
 		},
 	},
@@ -35,7 +35,7 @@ const CONFIG = {
 type ConfigOption = { id: string; currentValue: string; options: { value: string; name: string }[] }
 type Run = { sessionId: string; blocks: WireBlock[]; assistant: string }
 
-const wireTool = (title: string) => title.replace(/^canvas_/, 'mcp__canvas_')
+const wireTool = (title: string) => title.replace(/^duet-canvas_/, 'mcp__duet-canvas_')
 
 // opencode runs as the user's own installed `opencode` binary over ACP (Agent Client Protocol, stdio), using the
 // provider logins the user set up with `opencode auth login`; we never read them. One process serves every chat; each
@@ -61,7 +61,7 @@ export class OpencodeDriver extends SessionDriver {
 				this.ev.closed(reason)
 			},
 		})
-		await this.#rpc.request('initialize', { protocolVersion: 1, clientCapabilities: {}, clientInfo: { name: 'canvas-idea', version: '0.1.0' } })
+		await this.#rpc.request('initialize', { protocolVersion: 1, clientCapabilities: {}, clientInfo: { name: 'duet-canvas', version: '0.1.0' } })
 		const s = await this.#rpc.request('session/new', SESSION)
 		this.#spare = s.sessionId
 		this.#config = s.configOptions ?? []
@@ -83,7 +83,7 @@ export class OpencodeDriver extends SessionDriver {
 	// Only the canvas tools may run; anything else the agent reaches for is refused.
 	#serve(method: string, p: { toolCall?: { title?: string }; options?: { optionId: string; kind: string }[] }) {
 		if (method !== 'session/request_permission') throw new Error(`The canvas chat cannot handle "${method}"`)
-		const allow = String(p.toolCall?.title ?? '').startsWith('canvas_') ? p.options?.find((o) => o.kind === 'allow_once') : undefined
+		const allow = String(p.toolCall?.title ?? '').startsWith('duet-canvas_') ? p.options?.find((o) => o.kind === 'allow_once') : undefined
 		const pick = allow ?? p.options?.find((o) => o.kind.startsWith('reject'))
 		return { outcome: pick ? { outcome: 'selected', optionId: pick.optionId } : { outcome: 'cancelled' } }
 	}

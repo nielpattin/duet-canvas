@@ -1,11 +1,11 @@
 services:
-  canvas:
+  duet-canvas:
     build: .
     ports:
       # Loopback only: the MCP tools can edit the canvas and there is no auth.
       - "127.0.0.1:5858:5858"
     volumes:
-      - canvas-data:/data
+      - duet-canvas-data:/data
     restart: unless-stopped
 volumes:
-  canvas-data:
+  duet-canvas-data:

@@ -397,10 +397,10 @@ async function runScenario(chat: Chat, agent: AgentId, sc: Scenario): Promise<Ou
 	// What every scenario owes, whatever it drew: the tools were used, correctly, and only the canvas tools.
 	const tools = chat.tools()
 	const bad = tools.filter((t) => t.error)
-	c('used the canvas tools', tools.some((t) => t.name.startsWith('mcp__canvas_')))
+	c('used the canvas tools', tools.some((t) => t.name.startsWith('mcp__duet-canvas_')))
 	c('no tool errors', bad.length === 0, bad.map((t) => `${t.name}: ${t.error!.replace(/\s+/g, ' ').slice(0, 400)}`).join(' | '))
 	c('every tool call was answered', tools.every((t) => t.answered), tools.filter((t) => !t.answered).map((t) => t.name).join(', '))
-	c('only canvas tools used', tools.every((t) => t.name.startsWith('mcp__canvas_')), [...new Set(tools.filter((t) => !t.name.startsWith('mcp__canvas_')).map((t) => t.name))].join(', '))
+	c('only canvas tools used', tools.every((t) => t.name.startsWith('mcp__duet-canvas_')), [...new Set(tools.filter((t) => !t.name.startsWith('mcp__duet-canvas_')).map((t) => t.name))].join(', '))
 	c('no chat errors', chat.errors.length === 0, chat.errors.join(' | '))
 	return { agent, scenario: sc.id, checks, ms: Date.now() - t0, cost: chat.state?.usage.cost ?? 0 }
 }
