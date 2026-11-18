@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 440" width="560" height="440" fill="none" stroke="currentColor" stroke-width="1" role="img" aria-labelledby="chat-title chat-desc" font-family="Cal Sans, sans-serif" font-size="11" data-plotter-mode="conceptual">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 10 560 440" width="560" height="440" fill="none" stroke="currentColor" stroke-width="1" role="img" aria-labelledby="chat-title chat-desc" font-family="Cal Sans, sans-serif" font-size="11" data-plotter-mode="conceptual">
   <title id="chat-title">One server, five agent CLIs</title>
-  <desc id="chat-desc">The browser talks to the server over a WebSocket. The server starts the agent CLI you picked (omp, claude, codex, opencode or pi) and talks to it over stdio. Whichever agent it is, it comes back to the same server over MCP to read and edit the canvas.</desc>
+  <desc id="chat-desc">The browser opens a WebSocket to /chat, which the server accepts only with the token cookie. The server starts the agent CLI you picked and talks to it over stdio: omp and pi with --mode rpc, claude with -p and stream-json, codex with app-server, opencode with acp. Whichever agent it is, it calls back into the same server over MCP, with only the canvas tools.</desc>
   <style>
     svg { color: #171717; }
     @media (prefers-color-scheme: dark) { svg { color: #ededed; } }
@@ -16,14 +16,14 @@
     .p1 { animation-name: p1; } .p2 { animation-name: p2; } .p3 { animation-name: p3; }
     .s1 { animation-name: s1; } .s2 { animation-name: s2; }
     .r0 { animation-name: r0; } .r1 { animation-name: r1; } .r2 { animation-name: r2; } .r3 { animation-name: r3; } .r4 { animation-name: r4; }
+    @keyframes ws { 0% { transform: translate(112px, 200px); opacity: 1; } 25% { transform: translate(200px, 200px); opacity: 1; } 25.1%, 100% { transform: translate(200px, 200px); opacity: 0; } }
+    @keyframes stdio { 0%, 25% { transform: translate(288px, 200px); opacity: 0; } 25.1% { opacity: 1; } 50% { transform: translate(376px, 200px); opacity: 1; } 50.1%, 100% { transform: translate(376px, 200px); opacity: 0; } }
+    @keyframes mcp { 0%, 55% { transform: translate(456px, 300px); opacity: 0; } 55.1% { opacity: 1; } 59.6% { transform: translate(456px, 340px); } 84% { transform: translate(244px, 340px); } 95% { transform: translate(244px, 244px); opacity: 1; } 95.1%, 100% { transform: translate(244px, 244px); opacity: 0; } }
     @keyframes p1 { 0%, 24.9% { opacity: 0; transform: scale(1); } 25% { opacity: .6; transform: scale(1); } 40%, 100% { opacity: 0; transform: scale(4.5); } }
     @keyframes p2 { 0%, 49.9% { opacity: 0; transform: scale(1); } 50% { opacity: .6; transform: scale(1); } 65%, 100% { opacity: 0; transform: scale(4.5); } }
     @keyframes p3 { 0% { opacity: .25; transform: scale(3); } 10%, 94.9% { opacity: 0; transform: scale(4.5); } 95% { opacity: .6; transform: scale(1); } 100% { opacity: .25; transform: scale(3); } }
     @keyframes s1 { 0%, 24.9% { opacity: 0; } 27% { opacity: 1; } 42%, 100% { opacity: 0; } }
     @keyframes s2 { 0% { opacity: .7; } 12%, 94.9% { opacity: 0; } 97% { opacity: 1; } 100% { opacity: .7; } }
-    @keyframes ws { 0% { transform: translate(120px, 200px); opacity: 1; } 25% { transform: translate(192px, 200px); opacity: 1; } 25.1%, 100% { transform: translate(192px, 200px); opacity: 0; } }
-    @keyframes stdio { 0%, 25% { transform: translate(280px, 200px); opacity: 0; } 25.1% { opacity: 1; } 50% { transform: translate(352px, 200px); opacity: 1; } 50.1%, 100% { transform: translate(352px, 200px); opacity: 0; } }
-    @keyframes mcp { 0%, 55% { transform: translate(440px, 300px); opacity: 0; } 55.1% { opacity: 1; } 59.8% { transform: translate(440px, 340px); } 85.5% { transform: translate(236px, 340px); } 95% { transform: translate(236px, 244px); opacity: 1; } 95.1%, 100% { transform: translate(236px, 244px); opacity: 0; } }
     @keyframes r0 { 0%, 8.7% { opacity: 0; } 9%, 17% { opacity: 1; } 17.3%, 100% { opacity: 0; } }
     @keyframes r1 { 0%, 28.7% { opacity: 0; } 29%, 37% { opacity: 1; } 37.3%, 100% { opacity: 0; } }
     @keyframes r2 { 0%, 48.7% { opacity: 0; } 49%, 57% { opacity: 1; } 57.3%, 100% { opacity: 0; } }
@@ -33,55 +33,58 @@
   </style>
 
   <!-- The browser and the server share a centre line (y = 200) with the middle row of the agent column. -->
-  <rect x="32" y="156" width="88" height="88"/>
-  <rect x="192" y="156" width="88" height="88"/>
-  <rect x="352" y="100" width="176" height="200"/>
-  <path d="M352 140H528M352 180H528M352 220H528M352 260H528" stroke-opacity=".32"/>
+  <rect x="24" y="156" width="88" height="88"/>
+  <rect x="200" y="156" width="88" height="88"/>
+  <rect x="376" y="100" width="160" height="200"/>
+  <path d="M376 140H536M376 180H536M376 220H536M376 260H536" stroke-opacity=".32"/>
 
   <!-- Connections carry traffic both ways, so they have no heads. -->
-  <path d="M120 200H192"/>
-  <path d="M280 200H352"/>
+  <path d="M112 200H200"/>
+  <path d="M288 200H376"/>
 
   <!-- The way back: every agent calls the server over MCP. One elbow, a head where it arrives. -->
-  <path d="M440 300V340H236V244"/>
-  <path d="M231.757 248.243L236 244L240.243 248.243"/>
+  <path d="M456 300V340H244V244"/>
+  <path d="M239.757 248.243L244 244L248.243 248.243"/>
 
   <!-- The server lights up when a prompt arrives and again when the agent calls back. -->
-  <rect class="flash a s1" x="192" y="156" width="88" height="88"/>
-  <rect class="flash a s2" x="192" y="156" width="88" height="88"/>
+  <rect class="flash a s1" x="200" y="156" width="88" height="88"/>
+  <rect class="flash a s2" x="200" y="156" width="88" height="88"/>
 
   <!-- The picked agent, painted once per pick. -->
   <g>
-    <rect class="row r0" x="352" y="100" width="176" height="40"/>
-    <rect class="row r1" x="352" y="140" width="176" height="40"/>
-    <rect class="row r2" x="352" y="180" width="176" height="40"/>
-    <rect class="row r3" x="352" y="220" width="176" height="40"/>
-    <rect class="row r4" x="352" y="260" width="176" height="40"/>
+    <rect class="row r0" x="376" y="100" width="160" height="40"/>
+    <rect class="row r1" x="376" y="140" width="160" height="40"/>
+    <rect class="row r2" x="376" y="180" width="160" height="40"/>
+    <rect class="row r3" x="376" y="220" width="160" height="40"/>
+    <rect class="row r4" x="376" y="260" width="160" height="40"/>
   </g>
 
-  <text stroke="none" opacity=".72" x="76" y="196" text-anchor="middle" font-size="12">Browser</text>
-  <text stroke="none" opacity=".5" x="76" y="214" text-anchor="middle">tldraw</text>
-  <text stroke="none" opacity=".72" x="236" y="196" text-anchor="middle" font-size="12">Server</text>
-  <text stroke="none" opacity=".5" x="236" y="214" text-anchor="middle">canvas</text>
+  <text stroke="none" opacity=".72" x="68" y="196" text-anchor="middle" font-size="12">Browser</text>
+  <text stroke="none" opacity=".5" x="68" y="214" text-anchor="middle">tldraw</text>
+  <text stroke="none" opacity=".72" x="244" y="196" text-anchor="middle" font-size="12">Server</text>
+  <text stroke="none" opacity=".5" x="244" y="214" text-anchor="middle">canvas</text>
   <text stroke="none" opacity=".72" x="156" y="192" text-anchor="middle">ws /chat</text>
-  <text stroke="none" opacity=".72" x="316" y="192" text-anchor="middle">stdio</text>
-  <text stroke="none" opacity=".72" x="338" y="358" text-anchor="middle">mcp http</text>
-  <text stroke="none" opacity=".5" x="440" y="90" text-anchor="middle">agent CLI, one per chat</text>
-    <text stroke="none" opacity=".72" x="364" y="124">omp</text>
-    <text stroke="none" opacity=".5" x="516" y="124" text-anchor="end" font-size="10">rpc</text>
-    <text stroke="none" opacity=".72" x="364" y="164">claude</text>
-    <text stroke="none" opacity=".5" x="516" y="164" text-anchor="end" font-size="10">stream-json</text>
-    <text stroke="none" opacity=".72" x="364" y="204">codex</text>
-    <text stroke="none" opacity=".5" x="516" y="204" text-anchor="end" font-size="10">json-rpc</text>
-    <text stroke="none" opacity=".72" x="364" y="244">opencode</text>
-    <text stroke="none" opacity=".5" x="516" y="244" text-anchor="end" font-size="10">acp</text>
-    <text stroke="none" opacity=".72" x="364" y="284">pi</text>
-    <text stroke="none" opacity=".5" x="516" y="284" text-anchor="end" font-size="10">rpc</text>
+  <text stroke="none" opacity=".5" x="156" y="218" text-anchor="middle" font-size="10">token cookie</text>
+  <text stroke="none" opacity=".72" x="332" y="192" text-anchor="middle">stdio</text>
+  <text stroke="none" opacity=".72" x="350" y="358" text-anchor="middle">mcp http</text>
+  <text stroke="none" opacity=".5" x="350" y="374" text-anchor="middle" font-size="10">canvas tools only</text>
+  <text stroke="none" opacity=".5" x="456" y="90" text-anchor="middle">agent CLI, one per chat</text>
+
+  <text stroke="none" opacity=".72" x="388" y="124">omp</text>
+  <text stroke="none" opacity=".5" x="524" y="124" text-anchor="end" font-size="10">--mode rpc</text>
+  <text stroke="none" opacity=".72" x="388" y="164">claude</text>
+  <text stroke="none" opacity=".5" x="524" y="164" text-anchor="end" font-size="10">-p · stream-json</text>
+  <text stroke="none" opacity=".72" x="388" y="204">codex</text>
+  <text stroke="none" opacity=".5" x="524" y="204" text-anchor="end" font-size="10">app-server</text>
+  <text stroke="none" opacity=".72" x="388" y="244">opencode</text>
+  <text stroke="none" opacity=".5" x="524" y="244" text-anchor="end" font-size="10">acp</text>
+  <text stroke="none" opacity=".72" x="388" y="284">pi</text>
+  <text stroke="none" opacity=".5" x="524" y="284" text-anchor="end" font-size="10">--mode rpc</text>
 
   <!-- A prompt, in causal order: browser to server, server to the picked agent, then the agent's MCP call back. -->
-  <circle class="ping a p1" cx="192" cy="200" r="4"/>
-  <circle class="ping a p2" cx="352" cy="200" r="4"/>
-  <circle class="ping a p3" cx="236" cy="244" r="4"/>
+  <circle class="ping a p1" cx="200" cy="200" r="4"/>
+  <circle class="ping a p2" cx="376" cy="200" r="4"/>
+  <circle class="ping a p3" cx="244" cy="244" r="4"/>
   <g class="ws"><circle class="dot a c0" r="3"/><circle class="dot a c1" r="2.4"/><circle class="dot a c2" r="1.8"/></g>
   <g class="stdio"><circle class="dot a c0" r="3"/><circle class="dot a c1" r="2.4"/><circle class="dot a c2" r="1.8"/></g>
   <g class="mcp"><circle class="dot a c0" r="3"/><circle class="dot a c1" r="2.4"/><circle class="dot a c2" r="1.8"/></g>

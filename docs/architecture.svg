@@ -1,84 +1,111 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 440" width="560" height="440" fill="none" stroke="currentColor" stroke-width="1" role="img" aria-labelledby="arch-title arch-desc" font-family="Cal Sans, sans-serif" font-size="11" data-plotter-mode="conceptual">
   <title id="arch-title">One server, two peers</title>
-  <desc id="arch-desc">The browser and the coding agent each connect to the same server, and never to each other. A shape drawn in the browser reaches the server over WebSocket and is stored in SQLite. The agent then adds its own shape over MCP, the server stores that too, and syncs it back to the browser.</desc>
+  <desc id="arch-desc">The browser and the coding agent each connect to the same server, and never to each other. A shape drawn in the browser reaches the server over WebSocket and is stored in SQLite, which advances canvas.clock. The agent calls get_changes with its last clock and learns about the shape, then adds its own with create_shapes over MCP. The server stores that too, advances the clock again, and syncs it back to the browser. The browser also posts its selection and viewport to /api/context, which the server keeps in ui-context.json.</desc>
   <style>
     svg { color: #171717; }
     @media (prefers-color-scheme: dark) { svg { color: #ededed; } }
     text { fill: currentColor; font-weight: 400; }
-    .a { animation-duration: 9s; animation-iteration-count: infinite; animation-timing-function: linear; }
+    .a { animation-duration: 12s; animation-iteration-count: infinite; animation-timing-function: linear; }
     .dot { fill: currentColor; stroke: none; opacity: 0; }
     .c1 { fill-opacity: .5; animation-delay: .06s; }
     .c2 { fill-opacity: .25; animation-delay: .12s; }
     .ping { opacity: 0; vector-effect: non-scaling-stroke; transform-box: fill-box; transform-origin: center; }
     .flash { fill: currentColor; fill-opacity: .08; stroke: none; opacity: 0; }
-    .user circle { animation-name: user; } .ctx circle { animation-name: ctx; } .agent circle { animation-name: agent; } .sync circle { animation-name: sync; }
-    .p1 { animation-name: p1; } .p2 { animation-name: p2; } .p3 { animation-name: p3; }
-    .f1 { animation-name: f1; } .f2 { animation-name: f2; } .fa { animation-name: fa; }
     .draw { stroke-dasharray: 1; }
-    .sh1 { animation-name: sh1; } .sh2 { animation-name: sh2; } .bar1 { animation-name: bar1; } .bar2 { animation-name: bar2; }
-    @keyframes user { 0%, 5.6% { transform: translate(144px, 176px); opacity: 0; } 5.7% { opacity: 1; animation-timing-function: cubic-bezier(.45, 0, .25, 1); } 16.6% { transform: translate(224px, 176px); opacity: 1; } 16.7%, 100% { transform: translate(224px, 176px); opacity: 0; } }
-    @keyframes ctx { 0%, 22.2% { transform: translate(144px, 200px); opacity: 0; } 22.3% { opacity: 1; animation-timing-function: cubic-bezier(.45, 0, .25, 1); } 33.2% { transform: translate(224px, 200px); opacity: 1; } 33.3%, 100% { transform: translate(224px, 200px); opacity: 0; } }
-    @keyframes agent { 0%, 42.2% { transform: translate(416px, 176px); opacity: 0; } 42.3% { opacity: 1; animation-timing-function: cubic-bezier(.45, 0, .25, 1); } 53.2% { transform: translate(336px, 176px); opacity: 1; } 53.3%, 100% { transform: translate(336px, 176px); opacity: 0; } }
-    @keyframes sync { 0%, 64.4% { transform: translate(224px, 176px); opacity: 0; } 64.5% { opacity: 1; animation-timing-function: cubic-bezier(.45, 0, .25, 1); } 75.5% { transform: translate(144px, 176px); opacity: 1; } 75.6%, 100% { transform: translate(144px, 176px); opacity: 0; } }
-    @keyframes p1 { 0%, 16.6% { opacity: 0; transform: scale(1); } 16.7% { opacity: .6; transform: scale(1); } 24%, 100% { opacity: 0; transform: scale(4.5); } }
-    @keyframes p2 { 0%, 53.2% { opacity: 0; transform: scale(1); } 53.3% { opacity: .6; transform: scale(1); } 60.6%, 100% { opacity: 0; transform: scale(4.5); } }
-    @keyframes p3 { 0%, 75.5% { opacity: 0; transform: scale(1); } 75.6% { opacity: .6; transform: scale(1); } 83%, 100% { opacity: 0; transform: scale(4.5); } }
-    @keyframes f1 { 0%, 16.6% { opacity: 0; } 17.5% { opacity: 1; } 25%, 100% { opacity: 0; } }
-    @keyframes f2 { 0%, 53.2% { opacity: 0; } 54.1% { opacity: 1; } 61.6%, 100% { opacity: 0; } }
-    @keyframes fa { 0%, 38% { opacity: 0; } 40% { opacity: 1; } 44%, 100% { opacity: 0; } }
-    @keyframes sh1 { 0% { stroke-dashoffset: 1; opacity: 1; } 5.6%, 95.5% { stroke-dashoffset: 0; opacity: 1; } 99%, 100% { stroke-dashoffset: 0; opacity: 0; } }
-    @keyframes sh2 { 0%, 75.6% { stroke-dashoffset: 1; opacity: 1; } 82.2%, 95.5% { stroke-dashoffset: 0; opacity: 1; } 99%, 100% { stroke-dashoffset: 0; opacity: 0; } }
-    @keyframes bar1 { 0%, 16.7% { stroke-dashoffset: 1; opacity: 1; } 22%, 95.5% { stroke-dashoffset: 0; opacity: 1; } 99%, 100% { stroke-dashoffset: 0; opacity: 0; } }
-    @keyframes bar2 { 0%, 53.3% { stroke-dashoffset: 1; opacity: 1; } 58.9%, 95.5% { stroke-dashoffset: 0; opacity: 1; } 99%, 100% { stroke-dashoffset: 0; opacity: 0; } }
+    .ck0, .ck1, .tl { opacity: 0; }
+    .user circle { animation-name: user; } .ctx circle { animation-name: ctx; } .req circle { animation-name: req; } .res circle { animation-name: res; } .ag2 circle { animation-name: ag2; } .sync circle { animation-name: sync; }
+    .p1 { animation-name: p1; } .p2 { animation-name: p2; } .p3 { animation-name: p3; } .p4 { animation-name: p4; } .p5 { animation-name: p5; }
+    .f1 { animation-name: f1; } .f2 { animation-name: f2; } .fa1 { animation-name: fa1; } .fa2 { animation-name: fa2; }
+    .sh1 { animation-name: sh1; } .sh2 { animation-name: sh2; } .ra { animation-name: ra; } .ca { animation-name: ca; } .bar1 { animation-name: bar1; } .bar2 { animation-name: bar2; }
+    .ck0 { animation-name: ck0; } .ck1 { animation-name: ck1; } .ck2 { animation-name: ck2; } .tl1 { animation-name: tl1; } .tl2 { animation-name: tl2; }
+    @keyframes user { 0%, 4.2% { transform: translate(132px, 176px); opacity: 0; } 4.3% { opacity: 1; animation-timing-function: cubic-bezier(.45, 0, .25, 1); } 12.4% { transform: translate(228px, 176px); opacity: 1; } 12.5%, 100% { transform: translate(228px, 176px); opacity: 0; } }
+    @keyframes ctx { 0%, 18.3% { transform: translate(132px, 200px); opacity: 0; } 18.4% { opacity: 1; animation-timing-function: cubic-bezier(.45, 0, .25, 1); } 26.6% { transform: translate(228px, 200px); opacity: 1; } 26.7%, 100% { transform: translate(228px, 200px); opacity: 0; } }
+    @keyframes req { 0%, 35% { transform: translate(428px, 176px); opacity: 0; } 35.1% { opacity: 1; animation-timing-function: cubic-bezier(.45, 0, .25, 1); } 43.2% { transform: translate(332px, 176px); opacity: 1; } 43.3%, 100% { transform: translate(332px, 176px); opacity: 0; } }
+    @keyframes res { 0%, 43.4% { transform: translate(332px, 176px); opacity: 0; } 43.5% { opacity: 1; animation-timing-function: cubic-bezier(.45, 0, .25, 1); } 51.6% { transform: translate(428px, 176px); opacity: 1; } 51.7%, 100% { transform: translate(428px, 176px); opacity: 0; } }
+    @keyframes ag2 { 0%, 58.3% { transform: translate(428px, 176px); opacity: 0; } 58.4% { opacity: 1; animation-timing-function: cubic-bezier(.45, 0, .25, 1); } 66.6% { transform: translate(332px, 176px); opacity: 1; } 66.7%, 100% { transform: translate(332px, 176px); opacity: 0; } }
+    @keyframes sync { 0%, 73.3% { transform: translate(228px, 176px); opacity: 0; } 73.4% { opacity: 1; animation-timing-function: cubic-bezier(.45, 0, .25, 1); } 81.6% { transform: translate(132px, 176px); opacity: 1; } 81.7%, 100% { transform: translate(132px, 176px); opacity: 0; } }
+    @keyframes p1 { 0%, 12.4% { opacity: 0; transform: scale(1); } 12.5% { opacity: .6; transform: scale(1); } 18.5%, 100% { opacity: 0; transform: scale(4.5); } }
+    @keyframes p5 { 0%, 43.2% { opacity: 0; transform: scale(1); } 43.3% { opacity: .6; transform: scale(1); } 49.3%, 100% { opacity: 0; transform: scale(4.5); } }
+    @keyframes p2 { 0%, 51.6% { opacity: 0; transform: scale(1); } 51.7% { opacity: .6; transform: scale(1); } 57.7%, 100% { opacity: 0; transform: scale(4.5); } }
+    @keyframes p3 { 0%, 66.6% { opacity: 0; transform: scale(1); } 66.7% { opacity: .6; transform: scale(1); } 72.7%, 100% { opacity: 0; transform: scale(4.5); } }
+    @keyframes p4 { 0%, 81.6% { opacity: 0; transform: scale(1); } 81.7% { opacity: .6; transform: scale(1); } 87.7%, 100% { opacity: 0; transform: scale(4.5); } }
+    @keyframes f1 { 0%, 12.4% { opacity: 0; } 13.3% { opacity: 1; } 19%, 100% { opacity: 0; } }
+    @keyframes f2 { 0%, 66.6% { opacity: 0; } 67.5% { opacity: 1; } 73%, 100% { opacity: 0; } }
+    @keyframes fa1 { 0%, 29.9% { opacity: 0; } 31.5% { opacity: 1; } 35%, 100% { opacity: 0; } }
+    @keyframes fa2 { 0%, 53% { opacity: 0; } 54.5% { opacity: 1; } 58%, 100% { opacity: 0; } }
+    @keyframes sh1 { 0% { stroke-dashoffset: 1; opacity: 1; } 4.2%, 95.5% { stroke-dashoffset: 0; opacity: 1; } 99%, 100% { stroke-dashoffset: 0; opacity: 0; } }
+    @keyframes sh2 { 0%, 81.7% { stroke-dashoffset: 1; opacity: 1; } 86.7%, 95.5% { stroke-dashoffset: 0; opacity: 1; } 99%, 100% { stroke-dashoffset: 0; opacity: 0; } }
+    @keyframes ra { 0%, 51.7% { stroke-dashoffset: 1; opacity: 1; } 55.5%, 95.5% { stroke-dashoffset: 0; opacity: 1; } 99%, 100% { stroke-dashoffset: 0; opacity: 0; } }
+    @keyframes ca { 0%, 56.7% { stroke-dashoffset: 1; opacity: 1; } 60%, 95.5% { stroke-dashoffset: 0; opacity: 1; } 99%, 100% { stroke-dashoffset: 0; opacity: 0; } }
+    @keyframes bar1 { 0%, 12.5% { stroke-dashoffset: 1; opacity: 1; } 16.7%, 95.5% { stroke-dashoffset: 0; opacity: 1; } 99%, 100% { stroke-dashoffset: 0; opacity: 0; } }
+    @keyframes bar2 { 0%, 66.7% { stroke-dashoffset: 1; opacity: 1; } 70.8%, 95.5% { stroke-dashoffset: 0; opacity: 1; } 99%, 100% { stroke-dashoffset: 0; opacity: 0; } }
+    @keyframes ck0 { 0%, 12.4% { opacity: .72; } 12.5%, 100% { opacity: 0; } }
+    @keyframes ck1 { 0%, 12.4% { opacity: 0; } 12.5%, 66.6% { opacity: .72; } 66.7%, 100% { opacity: 0; } }
+    @keyframes ck2 { 0%, 66.6% { opacity: 0; } 66.7%, 95.5% { opacity: .72; } 99%, 100% { opacity: 0; } }
+    @keyframes tl1 { 0%, 32.9% { opacity: 0; } 33%, 52% { opacity: .72; } 52.1%, 100% { opacity: 0; } }
+    @keyframes tl2 { 0%, 56.9% { opacity: 0; } 57%, 70% { opacity: .72; } 70.1%, 100% { opacity: 0; } }
     @media (prefers-reduced-motion: reduce) { .a { animation: none !important; } }
   </style>
-  <g transform="translate(0 4)">
-    <!-- Browser, server room + store, agent. Both peers share the room cell's height and the connection line (y = 176). -->
-    <rect class="flash a fa" x="416" y="128" width="112" height="96"/>
-    <rect class="flash a f1" x="224" y="128" width="112" height="96"/>
-    <rect class="flash a f2" x="224" y="128" width="112" height="96"/>
-    <rect x="32" y="128" width="112" height="96"/>
-    <rect x="224" y="128" width="112" height="176"/>
-    <path d="M224 224H336" stroke-opacity=".32"/>
-    <rect x="416" y="128" width="112" height="96"/>
+  <g transform="translate(0 -8)">
+    <!-- Browser, server (room above, store below), agent. Both peers share the room cell's height and the connection line (y = 176). -->
+    <rect class="flash a fa1" x="428" y="128" width="104" height="96"/>
+    <rect class="flash a fa2" x="428" y="128" width="104" height="96"/>
+    <rect class="flash a f1" x="228" y="128" width="104" height="96"/>
+    <rect class="flash a f2" x="228" y="128" width="104" height="96"/>
+    <rect x="28" y="128" width="104" height="96"/>
+    <rect x="228" y="128" width="104" height="200"/>
+    <path d="M228 224H332" stroke-opacity=".32"/>
+    <rect x="428" y="128" width="104" height="96"/>
 
     <!-- Connections: no heads, they carry traffic both ways. -->
-    <path d="M144 176H224"/>
-    <path d="M336 176H416"/>
+    <path d="M132 176H228"/>
+    <path d="M332 176H428"/>
 
-    <!-- Selection and viewport: one-way transfer, solid head on a dashed shaft that starts at the tip. -->
-    <path d="M224 200H144" stroke-opacity=".32" stroke-dasharray="4 6"/>
-    <path d="M219.757 195.757L224 200L219.757 204.243" stroke-opacity=".32"/>
+    <!-- Selection and viewport: one-way transfer into ui-context.json, solid head on a dashed shaft that starts at the tip. -->
+    <path d="M228 200H132" stroke-opacity=".32" stroke-dasharray="4 6"/>
+    <path d="M223.757 195.757L228 200L223.757 204.243" stroke-opacity=".32"/>
 
-    <!-- The canvas in the browser: the user's rectangle first, then the agent's circle once it syncs back. -->
-    <rect class="draw a sh1" x="48" y="184" width="28" height="20" pathLength="1"/>
-    <circle class="draw a sh2" cx="112" cy="194" r="10" pathLength="1"/>
+    <!-- Each peer's copy of the canvas: the user's rectangle, then the agent's circle. The agent learns of the rectangle through get_changes. -->
+    <rect class="draw a sh1" x="44" y="184" width="28" height="20" pathLength="1"/>
+    <circle class="draw a sh2" cx="106" cy="194" r="10" pathLength="1"/>
+    <rect class="draw a ra" x="444" y="184" width="28" height="20" pathLength="1"/>
+    <circle class="draw a ca" cx="506" cy="194" r="10" pathLength="1"/>
 
-    <!-- What the server stores: one row per edit, written as it arrives. -->
-    <path class="draw a bar1" d="M248 284H312" pathLength="1"/>
-    <path class="draw a bar2" d="M248 294H312" pathLength="1"/>
+    <!-- What the server stores: one row per edit, written as it arrives, and the clock they advance. -->
+    <path class="draw a bar1" d="M252 300H308" pathLength="1"/>
+    <path class="draw a bar2" d="M252 310H308" pathLength="1"/>
 
-    <text stroke="none" opacity=".72" x="88" y="150" text-anchor="middle" font-size="12">Browser</text>
-    <text stroke="none" opacity=".5" x="88" y="165" text-anchor="middle">tldraw</text>
-    <text stroke="none" opacity=".72" x="280" y="172" text-anchor="middle" font-size="12">TLSocketRoom</text>
-    <text stroke="none" opacity=".5" x="280" y="190" text-anchor="middle">sync room</text>
+    <text stroke="none" opacity=".72" x="80" y="150" text-anchor="middle" font-size="12">Browser</text>
+    <text stroke="none" opacity=".5" x="80" y="165" text-anchor="middle">tldraw</text>
+    <text stroke="none" opacity=".72" x="280" y="150" text-anchor="middle" font-size="12">TLSocketRoom</text>
+    <text stroke="none" opacity=".5" x="280" y="165" text-anchor="middle">sync room</text>
+    <text stroke="none" opacity=".5" x="280" y="216" text-anchor="middle" font-size="10">ui-context.json</text>
     <text stroke="none" opacity=".72" x="280" y="246" text-anchor="middle" font-size="12">SQLite</text>
     <text stroke="none" opacity=".5" x="280" y="262" text-anchor="middle">canvas.db</text>
-    <text stroke="none" opacity=".72" x="472" y="172" text-anchor="middle" font-size="12">Agent</text>
-    <text stroke="none" opacity=".5" x="472" y="190" text-anchor="middle">MCP client</text>
-    <text stroke="none" opacity=".72" x="184" y="168" text-anchor="middle">WebSocket</text>
-    <text stroke="none" opacity=".72" x="376" y="168" text-anchor="middle">MCP · http</text>
-    <text stroke="none" opacity=".5" x="184" y="218" text-anchor="middle">/api/context</text>
+    <text class="a ck0" stroke="none" opacity=".72" x="280" y="284" text-anchor="middle">clock 0</text>
+    <text class="a ck1" stroke="none" opacity=".72" x="280" y="284" text-anchor="middle">clock 1</text>
+    <text class="a ck2" stroke="none" opacity=".72" x="280" y="284" text-anchor="middle">clock 2</text>
+    <text stroke="none" opacity=".72" x="480" y="150" text-anchor="middle" font-size="12">Agent</text>
+    <text stroke="none" opacity=".5" x="480" y="165" text-anchor="middle">MCP client</text>
+    <text stroke="none" opacity=".72" x="180" y="168" text-anchor="middle">WebSocket</text>
+    <text stroke="none" opacity=".72" x="380" y="168" text-anchor="middle">MCP · http</text>
+    <text stroke="none" opacity=".5" x="180" y="218" text-anchor="middle">/api/context</text>
+    <text class="a tl1" stroke="none" opacity=".72" x="380" y="192" text-anchor="middle" font-size="10">get_changes</text>
+    <text class="a tl2" stroke="none" opacity=".72" x="380" y="192" text-anchor="middle" font-size="10">create_shapes</text>
 
-    <!-- A ring where each edit lands. -->
-    <circle class="ping a p1" cx="224" cy="176" r="4"/>
-    <circle class="ping a p2" cx="336" cy="176" r="4"/>
-    <circle class="ping a p3" cx="144" cy="176" r="4"/>
+    <!-- A ring where each message lands. -->
+    <circle class="ping a p1" cx="228" cy="176" r="4"/>
+    <circle class="ping a p5" cx="332" cy="176" r="4"/>
+    <circle class="ping a p2" cx="428" cy="176" r="4"/>
+    <circle class="ping a p3" cx="332" cy="176" r="4"/>
+    <circle class="ping a p4" cx="132" cy="176" r="4"/>
 
-    <!-- Signals, in causal order: a browser edit, the context post, an agent edit, the sync back to the browser. Each has a short tail. -->
+    <!-- Signals in causal order: a browser edit, the context post, the agent's get_changes and its reply, the agent's edit, the sync back. Each has a short tail. -->
     <g class="user"><circle class="dot a c0" r="3"/><circle class="dot a c1" r="2.4"/><circle class="dot a c2" r="1.8"/></g>
     <g class="ctx"><circle class="dot a c0" r="3"/><circle class="dot a c1" r="2.4"/><circle class="dot a c2" r="1.8"/></g>
-    <g class="agent"><circle class="dot a c0" r="3"/><circle class="dot a c1" r="2.4"/><circle class="dot a c2" r="1.8"/></g>
+    <g class="req"><circle class="dot a c0" r="3"/><circle class="dot a c1" r="2.4"/><circle class="dot a c2" r="1.8"/></g>
+    <g class="res"><circle class="dot a c0" r="3"/><circle class="dot a c1" r="2.4"/><circle class="dot a c2" r="1.8"/></g>
+    <g class="ag2"><circle class="dot a c0" r="3"/><circle class="dot a c1" r="2.4"/><circle class="dot a c2" r="1.8"/></g>
     <g class="sync"><circle class="dot a c0" r="3"/><circle class="dot a c1" r="2.4"/><circle class="dot a c2" r="1.8"/></g>
   </g>
 </svg>
