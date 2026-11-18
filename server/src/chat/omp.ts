@@ -16,7 +16,7 @@ const CONFIG = join(WORKSPACE, 'chat.yml')
 // `--no-tools` drops every built-in (bash, edit, eval, fs, LSP...) and `tools.xdev: false` keeps the MCP tools
 // top-level, so the model needs no read/write to reach them.
 // Extensions, skills, rules and context files are off so the user's coding setup does not leak into this chat.
-// Checked with get_state.dumpTools: exactly the 14 canvas tools (see mcpGuard.ts for the user's own MCP servers).
+// Checked with get_state.dumpTools: exactly the canvas tools (see mcpGuard.ts for the user's own MCP servers).
 const OMP_ARGS = [
 	'--system-prompt', SYSTEM_PROMPT,
 	'--mode', 'rpc', '--no-ui', '--yolo', '--continue',

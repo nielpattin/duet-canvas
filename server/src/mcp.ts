@@ -2,7 +2,6 @@ import { readFileSync } from 'node:fs'
 import { basename } from 'node:path'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
-import { askBrowser, parseJsonReply } from './bridge.ts'
 import { room } from './room.ts'
 import {
 	addMedia,
@@ -50,15 +49,15 @@ MARKS (how the user talks to you)
   it answered) or resolve_mark (no text needed, e.g. you only changed the canvas). Never leave a handled
   mark open, and never touch marks with status "answered" unless the user reopened them.
 - A mark on a selection has a dashed pink box around everything selected ("selection": its x, y, w, h in list_marks).
-  Answering turns the box violet and points your reply at it. To look at it, capture it with bounds = that box.
+  Answering turns the box violet and points your reply at it. Its x, y, w, h tell you which shapes it covers.
 - A mark aimed at one of your replies, or at a box you already answered, continues a conversation: list_marks adds "thread" (what the user wrote first, what you answered, and the box it was about, oldest first). Read it before answering.
 - list_marks is enough when you only need the marks; get_context also gives selection and viewport (its marks are a short list).
 - When the user says "this", "that" or "here" without a mark, call get_context: it returns their current
   selection, viewport and open marks. It works with the browser closed too (last known state).
 
 SEEING THE CANVAS
-- get_canvas returns data, not a picture. To see shapes rendered, call capture with shapeIds or a bounds area. Use it when
-  you need to judge how something looks. NEVER use it to confirm a routine edit, and NEVER open a browser to check your work.
+- get_canvas returns data (types, positions, sizes, text, colors, arrow bindings), not a picture. Work from that: you
+  cannot render the canvas, so do not try to confirm how something looks, and NEVER open a browser to check your work.
 
 MEDIA
 - get_canvas lists image and video shapes but does not show them. Call view_image with an image shape id to actually
@@ -315,36 +314,6 @@ export function buildMcpServer(origin: string) {
 					content: [
 						{ type: 'text' as const, text: `${img.name} (${img.mimeType})` },
 						{ type: 'image' as const, data: img.base64, mimeType: img.mimeType },
-					],
-				}
-			} catch (e) {
-				return failure(e)
-			}
-		}
-	)
-
-	server.registerTool(
-		'capture',
-		{
-			description:
-				'Render shapes to a PNG so you can see them. Choose the shapes with `shapeIds`, or an area with `bounds` (page coordinates) ' +
-				'on `pageId`; give neither to render the whole page. Read-only: nothing on the canvas changes. The picture is capped at ' +
-				'1568px on its longest side. tldraw can only render inside a browser, so a tab must be open on the canvas app.',
-			inputSchema: {
-				shapeIds: z.array(z.string()).optional().describe('Render exactly these shapes (any page)'),
-				bounds: z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() }).optional().describe('Render the shapes inside this area of the page'),
-				pageId: z.string().optional().describe('Page for `bounds` or a whole-page render. Defaults like get_canvas.'),
-				scale: z.number().min(0.1).max(2).optional().describe('Default 1'),
-			},
-		},
-		async ({ shapeIds, bounds, pageId, scale }) => {
-			try {
-				const reply = await askBrowser({ type: 'capture', shapeIds, bounds, pageId: resolvePageId(pageId), scale })
-				if (!reply.contentType.startsWith('image/')) parseJsonReply(reply) // throws the browser's error
-				return {
-					content: [
-						{ type: 'text' as const, text: 'Rendered canvas capture.' },
-						{ type: 'image' as const, data: reply.body.toString('base64'), mimeType: 'image/png' },
 					],
 				}
 			} catch (e) {

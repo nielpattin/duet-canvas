@@ -20,7 +20,6 @@ import 'tldraw/tldraw.css'
 import { AgentBadges } from './AgentBadges.tsx'
 import { ChatPanel, ChatToggle } from './chat/ChatPanel.tsx'
 import { setDarkMode } from './chat/theme.ts'
-import { onBridgeMessage, setBridgeEditor } from './bridge.ts'
 import { keepMarksTidy, reopenEditedMarks } from './marks.ts'
 import { addMarkActions, MarkMenuItems, MarkNoteShapeUtil, markTranslations, OpenMarksPill } from './markAssist.tsx'
 import { MarkTool } from './MarkTool.ts'
@@ -127,10 +126,8 @@ function onMount(editor: Editor) {
 		if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') e.preventDefault()
 	}
 	window.addEventListener('keydown', blockSave, true)
-	setBridgeEditor(editor)
 	return () => {
 		window.removeEventListener('keydown', blockSave, true)
-		setBridgeEditor(null)
 		stopTheme()
 		stopSession()
 		stopPush()
@@ -145,7 +142,6 @@ export function App() {
 		uri: `${wsProtocol}://${location.host}/connect`,
 		assets,
 		shapeUtils: syncShapeUtils,
-		onCustomMessageReceived: onBridgeMessage,
 	})
 	return (
 		<div style={{ position: 'fixed', inset: 0, display: 'flex' }}>

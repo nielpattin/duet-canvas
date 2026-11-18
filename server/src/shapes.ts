@@ -310,14 +310,6 @@ export function listPages() {
 		.map((p) => ({ id: p.id as string, name: p.name }))
 }
 
-// Every shape and binding id in the document. A browser tab must have all of them before it can render what the
-// agent just wrote: sync is asynchronous, so the server returns before the tab has caught up.
-export function syncIds(): string[] {
-	return readAll()
-		.filter((r) => isShape(r) || isBinding(r))
-		.map((r) => r.id as string)
-}
-
 // Where content already is, so the agent can reason about free space.
 export function contentBounds(pageId?: string) {
 	const records = readAll()

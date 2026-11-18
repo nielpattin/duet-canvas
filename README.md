@@ -16,7 +16,6 @@ agent --MCP (HTTP)--> server (TLSocketRoom + SQLite) <--WebSocket-- browser (nor
 ## Requirements
 
 - Node.js 24 (the server runs TypeScript directly) and pnpm 12.
-- A browser tab open on the app, for `capture` (tldraw renders only in a browser).
 - Optional: one or more of [omp](https://github.com/can1357/oh-my-pi), [Claude Code](https://code.claude.com), [Codex](https://github.com/openai/codex) or [opencode](https://opencode.ai) on your `PATH`, each already signed in, for the in-app chat. Not needed if you only connect an MCP client.
 - Optional: Docker, to run the server without Node.
 
@@ -112,12 +111,12 @@ codex mcp add canvas --url http://localhost:5858/mcp
 Any other MCP client that speaks streamable HTTP works with the same URL.
 
 Tools: `get_context`, `get_canvas` (one page at a time), `get_changes`, `list_marks`, `reply_to_mark`, `resolve_mark`,
-`add_text_block`, `capture`, `create_page`, `create_shapes`, `update_shapes`, `delete_shapes`, `view_image`, `add_media`.
+`add_text_block`, `create_page`, `create_shapes`, `update_shapes`, `delete_shapes`, `view_image`, `add_media`.
 
 `add_media` takes PNG, JPEG, GIF, WebP, MP4 or WebM from a local `path`, a `url` (the server downloads it) or `base64`.
 Sample files to try it with are in `examples/media/`. Only images can be *viewed* by the agent (`view_image`).
 
-**Seeing the canvas:** `get_canvas` returns data. `capture` renders chosen shapes (`shapeIds`) or an area (`bounds`, on any `pageId`) to a PNG. It is read-only and never touches anyone's selection, camera or page. tldraw can only render inside a browser, so a tab must be open on the app.
+**Seeing the canvas:** the agent works from data only. `get_canvas` returns types, positions, sizes, text, colors and arrow bindings; there is no render or screenshot tool, so no browser tab is needed for the agent to work.
 
 **Staying in sync:** every read is live, and every result ends with `canvas.clock` and `canvas.openMarks`. The agent
 passes its last clock to `get_changes` to see what the user added, edited, moved or deleted since.
