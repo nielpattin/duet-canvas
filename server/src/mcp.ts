@@ -73,7 +73,7 @@ STAYING IN SYNC (the user edits the canvas while you work)
 - Selection and viewport are not part of the document. get_context always returns the current ones.
 
 LAYOUT
-- Arrows: give shapes ids and connect them with {type:"arrow", from, to}; they bind and follow the shapes when moved.
+- Arrows: connect shapes with {type:"arrow", from, to}; they bind and follow the shapes when moved. In create_shapes, from/to is the position of a shape in the same "shapes" list (0 = the first), or the id of a shape already on the canvas. The server makes every shape id and returns them in "created".
   Pick route per arrow: "straight" for tidy flows, "curve" for maps/trees that fan out, "elbow" for loops.
   Lay diagrams out in a grid so arrows run between neighbours without crossing other shapes, and fix any warning
   create_shapes returns.
@@ -256,23 +256,20 @@ export function buildMcpServer(origin: string) {
 		'create_shapes',
 		{
 			description:
-				'Create diagram shapes (boxes, notes, arrows...). Give shapes an `id` so arrows can reference them via from/to ' +
-				'(arrows then bind and follow the shapes). Omit x/y to auto-place in free space; if you give x/y for several shapes (a wireframe, a layout) they are treated as one drawing and slid together to free space if they would overlap anything, see `shifted` in the result. Geo shapes default to 160x100. ' +
+				'Create diagram shapes (boxes, notes, arrows...). You never choose ids: the server makes them and returns them in `created`. ' +
+				'To join shapes made in this call, put an arrow in the same list with from/to set to the position of each shape in the list (0 = the first); ' +
+				'arrows then bind and follow the shapes. Omit x/y to auto-place in free space; if you give x/y for several shapes (a wireframe, a layout) they are treated as one drawing and slid together to free space if they would overlap anything, see `shifted` in the result. Geo shapes default to 160x100. ' +
 				'Shapes joined by arrows get extra room automatically. Arrow `route`: "straight" (default, tidy flows), "curve" (gentle arc, for maps and trees that fan out) or "elbow" (right angles, for loops). An arrow takes `text`: that is its label, drawn on the arrow, so never make a separate text shape for a label. ' +
 				'Read the returned warnings: they flag arrows that pass through other shapes or are too short to see. ' +
 				'Everything created is marked author "agent".',
 			inputSchema: {
 				shapes: z.array(ShapeInput).min(1),
 				pageId: z.string().optional().describe('Defaults to the page the user is on'),
-				replace: z
-					.boolean()
-					.optional()
-					.describe('If a shape with the same id exists, recreate it instead of failing. Makes retried calls safe.'),
 			},
 		},
-		({ shapes, pageId, replace }) =>
+		({ shapes, pageId }) =>
 			guard(() => {
-				const out = createShapes(shapes, pageId, replace)
+				const out = createShapes(shapes, pageId)
 				// Page-scoped, so the agent does not need a get_canvas just to learn where things ended up.
 				return {
 					page: listPages().find((p) => p.id === out.pageId),

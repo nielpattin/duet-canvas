@@ -256,7 +256,7 @@ const SCENARIOS: Scenario[] = [
 			{
 				prompt:
 					'Draw a login flow on the canvas: three rectangles labelled exactly "Start", "Login" and "Dashboard", in a row from left to right, ' +
-					'joined by two arrows (Start to Login, Login to Dashboard). Give the shapes ids and bind each arrow to its two shapes.',
+					'joined by two arrows (Start to Login, Login to Dashboard). Bind each arrow to its two shapes.',
 			},
 		],
 		verify: (c) => {
@@ -327,7 +327,7 @@ const SCENARIOS: Scenario[] = [
 		id: 'marks',
 		title: 'answer marks: reply on one, do the work and close the other',
 		setup: () => {
-			const [box] = seed([{ type: 'rectangle', id: 'idea-box', text: 'Shared whiteboard for agents', x: 100, y: 100, w: 260, h: 120, color: 'blue' }])
+			const [box] = seed([{ type: 'rectangle', text: 'Shared whiteboard for agents', x: 100, y: 100, w: 260, h: 120, color: 'blue' }])
 			markIds.box = box!
 			markIds.explain = seedMark('Explain in one sentence what this box is for.', { x: 420, y: 100 }, [box!])
 			markIds.build = seedMark('Add a green ellipse labelled "Done" next to this note, then close this mark.', { x: 420, y: 320 })

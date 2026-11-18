@@ -43,11 +43,10 @@ const COLORS = [
 const FILLS = ['none', 'semi', 'solid', 'pattern'] as const
 const GEOS = ['rectangle', 'ellipse', 'diamond', 'triangle', 'hexagon', 'star', 'cloud'] as const
 
+const shapeRef = z.union([z.number().int().min(0), z.string()])
+type ShapeRef = z.infer<typeof shapeRef>
+
 export const ShapeInput = z.object({
-	id: z
-		.string()
-		.optional()
-		.describe('Optional stable id (e.g. "login-box"). Use it to reference the shape from arrows.'),
 	type: z.enum([...GEOS, 'text', 'note', 'arrow']),
 	x: z.number().optional().describe('Page x of top-left. Omit x and y to let the server pick a free spot.'),
 	y: z.number().optional().describe('Page y of top-left. Omit x and y to let the server pick a free spot.'),
@@ -57,8 +56,8 @@ export const ShapeInput = z.object({
 	text: z.string().optional().describe('Label / content'),
 	color: z.enum(COLORS).optional(),
 	fill: z.enum(FILLS).optional(),
-	from: z.string().optional().describe('Arrow only: id of the shape the arrow starts at'),
-	to: z.string().optional().describe('Arrow only: id of the shape the arrow ends at'),
+	from: shapeRef.optional().describe('Arrow only: the shape it starts at. A number is the position of a shape in this `shapes` list (0 = the first); a string is the id of a shape already on the canvas.'),
+	to: shapeRef.optional().describe('Arrow only: the shape it ends at, same as `from`'),
 	x2: z.number().optional().describe('Arrow only: end point x when `to` is not given'),
 	y2: z.number().optional().describe('Arrow only: end point y when `to` is not given'),
 	route: z
@@ -69,6 +68,8 @@ export const ShapeInput = z.object({
 		),
 })
 export type ShapeInput = z.infer<typeof ShapeInput>
+// What the shape builders work on: the ids are real by then (see createShapes).
+type ShapeSpec = Omit<ShapeInput, 'from' | 'to'> & { id?: string; from?: string; to?: string }
 
 export const ShapePatch = z.object({
 	id: z.string(),
@@ -459,7 +460,7 @@ interface Common {
 }
 
 function buildShape(
-	input: ShapeInput,
+	input: ShapeSpec,
 	c: Common,
 	size: { w: number; h: number },
 	lookup: (id: string) => TLShape | undefined
@@ -708,15 +709,23 @@ function addLink(txn: Txn, from: TLShape, to: TLShape, c: Common): TLShape {
 	return arrow
 }
 
-export function createShapes(inputs: ShapeInput[], pageIdHint?: string, replace = false) {
+export function createShapes(requested: ShapeInput[], pageIdHint?: string) {
 	const pageId = resolvePageId(pageIdHint)
 	return room.storage.transaction((txn) => {
 		const all = Array.from(txn.values())
-		// Shapes being recreated are about to be replaced, so they are not in the way of their own replacement.
-		const replaced = replace ? new Set<string>(inputs.flatMap((i) => (i.id ? [normShapeId(i.id)] : []))) : new Set<string>()
-		const rest = all.filter((r) => !replaced.has(r.id))
-		const obstacles = obstaclesOn(rest, pageId)
-		const segments = segmentsOn(rest, pageId)
+		// The server makes every id. An arrow points at a shape of this call by its position in `shapes`, or at a shape that
+		// is already on the canvas by its id.
+		const newIds = requested.map(() => createShapeId())
+		const resolve = (ref: ShapeRef | undefined, what: string): string | undefined => {
+			if (ref === undefined) return undefined
+			if (typeof ref === 'string' && !/^\d+$/.test(ref)) return ref
+			const n = Number(ref)
+			if (!requested[n] || requested[n].type === 'arrow') throw new Error(`Arrow "${what}" ${ref} is not the position of a non-arrow shape in this call (0 is the first)`)
+			return newIds[n]
+		}
+		const inputs: ShapeSpec[] = requested.map((i, n) => ({ ...i, id: newIds[n], from: resolve(i.from, 'from'), to: resolve(i.to, 'to') }))
+		const obstacles = obstaclesOn(all, pageId)
+		const segments = segmentsOn(all, pageId)
 		// Rect of every shape on the page by id, so arrows can be checked for crossing shapes.
 		const rects = new Map<string, Rect>()
 		for (const s of all.filter(isShape).filter((s) => s.parentId === pageId)) {
@@ -739,10 +748,10 @@ export function createShapes(inputs: ShapeInput[], pageIdHint?: string, replace 
 			}
 		}
 		const nonArrows = inputs.filter((i) => i.type !== 'arrow')
-		const byId = new Map<string, ShapeInput>(nonArrows.flatMap((i) => (i.id ? [[normShapeId(i.id), i] as const] : [])))
-		const seen = new Set<ShapeInput>()
-		const order: ShapeInput[] = []
-		const visit = (i: ShapeInput) => {
+		const byId = new Map<string, ShapeSpec>(nonArrows.flatMap((i) => (i.id ? [[normShapeId(i.id), i] as const] : [])))
+		const seen = new Set<ShapeSpec>()
+		const order: ShapeSpec[] = []
+		const visit = (i: ShapeSpec) => {
 			if (seen.has(i)) return
 			seen.add(i)
 			const parent = i.id ? byId.get(predecessor.get(normShapeId(i.id)) ?? '') : undefined
@@ -755,7 +764,7 @@ export function createShapes(inputs: ShapeInput[], pageIdHint?: string, replace 
 		const result: { id: string; x?: number; y?: number; w?: number; h?: number; placed?: boolean }[] = []
 		const warnings: string[] = []
 
-		const sizeFor = (input: ShapeInput) => {
+		const sizeFor = (input: ShapeSpec) => {
 			const text = input.text ?? ''
 			// A diamond only has room for text in its middle, so it needs to be bigger than a box to fit a label.
 			const w = input.w ?? (input.type === 'text' || input.type === 'note' ? 200 : input.type === 'diamond' ? 200 : 160)
@@ -814,13 +823,6 @@ export function createShapes(inputs: ShapeInput[], pageIdHint?: string, replace 
 			}
 
 			const shape = validated(buildShape(spec, { pageId, index: at, meta: { author: 'agent' } }, { w, h }, lookup))
-			if (txn.get(shape.id)) {
-				if (!replace) {
-					throw new Error(`Shape id ${shape.id} already exists. Use update_shapes to change it, or pass replace: true to recreate it.`)
-				}
-				// Re-creating keeps other arrows attached (same id); only this shape's own arrow ends are rebuilt.
-				for (const r of Array.from(txn.values())) if (isBinding(r) && r.fromId === shape.id) txn.delete(r.id)
-			}
 			txn.set(shape.id, shape)
 			created.set(shape.id, shape)
 			if (!isArrow) rects.set(shape.id, { x: spec.x!, y: spec.y!, w, h })
@@ -852,7 +854,7 @@ function elbowAnchors(from: TLShape | undefined, to: TLShape | undefined, rects:
 
 // An arrow that runs through a third shape, or sits too close to read, is a layout bug the agent can fix.
 function arrowWarnings(
-	input: ShapeInput,
+	input: ShapeSpec,
 	arrowId: string,
 	from: TLShape | undefined,
 	to: TLShape | undefined,
@@ -862,7 +864,7 @@ function arrowWarnings(
 	const a = rects.get(from.id)
 	const b = rects.get(to.id)
 	if (!a || !b) return []
-	const label = `Arrow ${input.id ?? arrowId} (${from.id} -> ${to.id})`
+	const label = `Arrow ${arrowId} (${from.id} -> ${to.id})`
 	const center = (r: Rect) => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 })
 	const out: string[] = []
 	// A right-angle route only runs straight (and so through whatever sits between) when the shapes line up.
