@@ -100,8 +100,14 @@ function onMount(editor: Editor) {
 	const stopCards = convertUserMediaToCards(editor)
 	// The chat panel sits outside <Tldraw>, so it gets tldraw's theme (light/dark/system, live) from here.
 	const stopTheme = react('chat theme', () => setDarkMode(editor.user.getIsDarkMode()))
+	// Stop the browser's "Save page as" on Ctrl/Cmd+S; the canvas is saved by the server already.
+	const blockSave = (e: KeyboardEvent) => {
+		if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') e.preventDefault()
+	}
+	window.addEventListener('keydown', blockSave, true)
 	setBridgeEditor(editor)
 	return () => {
+		window.removeEventListener('keydown', blockSave, true)
 		setBridgeEditor(null)
 		stopTheme()
 		stopPush()
