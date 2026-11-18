@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 440" width="560" height="440" fill="none" stroke="currentColor" stroke-width="1" role="img" aria-labelledby="arch-title arch-desc" font-family="Cal Sans, sans-serif" font-size="11" data-plotter-mode="conceptual">
   <title id="arch-title">One server, two peers</title>
-  <desc id="arch-desc">The browser and the coding agent each connect to the same server, at the same distance, and never to each other. An edit made in the browser reaches the server over WebSocket, the agent's edit reaches it over MCP, and the server stores both in SQLite and syncs the agent's edit back to the browser.</desc>
+  <desc id="arch-desc">The browser and the coding agent each connect to the same server, and never to each other. An edit made in the browser reaches the server over WebSocket, the agent's edit reaches it over MCP, and the server stores both in SQLite and syncs the agent's edit back to the browser.</desc>
   <style>
     svg { color: #171717; }
     @media (prefers-color-scheme: dark) { svg { color: #ededed; } }
@@ -21,7 +21,7 @@
     @keyframes bar2 { 0%, 54% { opacity: 0; } 56%, 94% { opacity: 1; } 98%, 100% { opacity: 0; } }
     @media (prefers-reduced-motion: reduce) { .dot, .bar { animation: none; } }
   </style>
-  <g transform="translate(0 24)">
+  <g transform="translate(0 4)">
     <!-- Browser, server room + store, agent: the two peers share the room cell's height and centre line (y = 176). -->
     <rect x="32" y="128" width="112" height="96"/>
     <rect x="224" y="128" width="112" height="176"/>
@@ -35,15 +35,6 @@
     <!-- Selection and viewport: one-way transfer, solid head on a dashed shaft that starts at the tip. -->
     <path d="M224 200H144" stroke-opacity=".32" stroke-dasharray="4 6"/>
     <path d="M219.757 195.757L224 200L219.757 204.243" stroke-opacity=".32"/>
-
-    <!-- Equal gaps: the two peers sit the same distance from the one owner. -->
-    <g stroke-opacity=".32">
-      <path d="M144 120V88M224 120V88M336 120V88M416 120V88"/>
-      <path d="M144 96H168M200 96H224M336 96H360M392 96H416"/>
-      <path d="M140 100L148 92M220 100L228 92M332 100L340 92M412 100L420 92"/>
-    </g>
-    <text stroke="none" opacity=".5" x="184" y="99.5" text-anchor="middle">72</text>
-    <text stroke="none" opacity=".5" x="376" y="99.5" text-anchor="middle">72</text>
 
     <!-- What is stored: one row per edit as it arrives. -->
     <path class="bar bar1" d="M248 284H312"/>
