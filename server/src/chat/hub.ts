@@ -248,9 +248,13 @@ export class ChatHub {
 					break
 				case 'open_chat': {
 					const chat = findChat(cmd.id)
-					if (!chat || (chat.agent ?? 'omp') !== this.#agent) throw new Error('That chat no longer exists')
-					await driver.openChat(chat.file)
-					await this.#resync(driver)
+					if (!chat) throw new Error('That chat no longer exists')
+					// A chat belongs to the agent that wrote it, so opening one from another agent switches to that agent first.
+					const agent = chat.agent ?? 'omp'
+					if (agent !== this.#agent) await this.#switchAgent(agent)
+					const target = await this.#ensure()
+					await target.openChat(chat.file)
+					await this.#resync(target)
 					break
 				}
 				case 'delete_chat':
@@ -276,6 +280,6 @@ export class ChatHub {
 	}
 
 	#chatList() {
-		return listChats(this.#agent).map((c) => ({ id: c.id, title: c.title || 'Untitled chat', updatedAt: c.updatedAt, current: c.id === this.#current?.id }))
+		return listChats().map((c) => ({ id: c.id, agent: c.agent ?? 'omp', title: c.title || 'Untitled chat', updatedAt: c.updatedAt, current: c.id === this.#current?.id }))
 	}
 }

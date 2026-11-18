@@ -11,9 +11,12 @@ function ago(ts: number) {
 	return 'just now'
 }
 
-// Earlier chats. Their transcripts stay on disk as omp sessions; opening one switches the live session to it.
+// Earlier chats of every agent, each tagged with the agent that wrote it. Their transcripts stay on disk; opening one
+// switches the live session to it, and to its agent first when that is another one.
 export function HistoryPicker() {
 	const chats = useChat((s) => s.chats)
+	const availability = useChat((s) => s.availability)
+	const labelOf = (id: string) => (availability.kind === 'ready' ? availability.agents.find((a) => a.id === id)?.label : undefined) ?? id
 	const connected = useChat((s) => s.connected)
 	const [confirm, setConfirm] = useState<string | null>(null)
 	const popover = useRef<HTMLDivElement>(null)
@@ -48,7 +51,9 @@ export function HistoryPicker() {
 								}}
 							>
 								<span className="history-title">{c.title}</span>
-								<span className="chat-muted">{c.current ? 'Current' : ago(c.updatedAt)}</span>
+								<span className="chat-muted">
+									{labelOf(c.agent)} · {c.current ? 'Current' : ago(c.updatedAt)}
+								</span>
 							</button>
 							{!c.current &&
 								(confirm === c.id ? (

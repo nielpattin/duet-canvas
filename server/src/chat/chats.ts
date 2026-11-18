@@ -39,16 +39,16 @@ export function touchChat(agent: AgentId, id: string, file: string, title?: stri
 
 export const findChat = (id: string) => chats().find((c) => c.id === id)
 
-// Newest first, for one agent. Entries whose session file is gone (deleted by hand) are dropped, unless they are brand
+// Newest first, every agent's. Entries whose session file is gone (deleted by hand) are dropped, unless they are brand
 // new: omp writes a session file lazily.
-export function listChats(agent: AgentId): Chat[] {
+export function listChats(): Chat[] {
 	const now = Date.now()
 	const alive = chats().filter((c) => existsSync(c.file) || now - c.updatedAt < STALE_MS)
 	if (alive.length !== chats().length) {
 		cache = alive
 		save()
 	}
-	return alive.filter((c) => (c.agent ?? 'omp') === agent).sort((a, b) => b.updatedAt - a.updatedAt)
+	return [...alive].sort((a, b) => b.updatedAt - a.updatedAt)
 }
 
 // Removes the transcript and its artifacts folder, but only inside our own sessions dir.

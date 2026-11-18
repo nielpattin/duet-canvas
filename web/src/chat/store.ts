@@ -16,7 +16,7 @@ export type WireMessage = {
 }
 export type ModelInfo = { provider: string; id: string; name: string; image: boolean }
 export type Item = { id: string; message: WireMessage }
-export type ChatInfo = { id: string; title: string; updatedAt: number; current: boolean }
+export type ChatInfo = { id: string; agent: AgentId; title: string; updatedAt: number; current: boolean }
 export type Queue = { steering: string[]; followUp: string[] }
 export type Usage = {
 	cost: number
