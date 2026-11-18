@@ -6,7 +6,8 @@
     "dev": "node --watch src/index.ts",
     "start": "node src/index.ts",
     "typecheck": "tsc",
-    "test": "node --test \"src/**/*.test.ts\""
+    "test": "node --test \"src/**/*.test.ts\"",
+    "test:agents": "node scripts/agents-e2e.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.19.11",

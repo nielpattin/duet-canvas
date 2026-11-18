@@ -10,7 +10,8 @@
     "dev": "pnpm -r --parallel dev",
     "build": "pnpm -r build",
     "start": "pnpm --filter server start",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "test:agents": "pnpm --filter server test:agents"
   },
   "packageManager": "pnpm@12.18.0"
 }
