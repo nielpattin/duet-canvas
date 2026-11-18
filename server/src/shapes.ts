@@ -934,17 +934,28 @@ function markRegionAnswered(txn: Txn, ann: TLShape) {
 	if (region && isShape(region)) txn.set(region.id, { ...region, props: { ...region.props, color: 'violet', dash: 'solid' } } as TLShape)
 }
 
-// A mark on a selection points at its dashed box; the reply goes beside that box and points at it too.
+// A mark on a selection points at its dashed box; the reply goes under that box and points at it too.
+// A mark on one shape has no box, so the reply goes under that shape; a mark aimed at nothing answers under its own note.
 function replyAnchor(txn: Txn, ann: TLShape): TLShape {
-	const regionId = metaOf(ann).regionId
-	const region = regionId ? txn.get(regionId as TLShape['id']) : undefined
-	return region && isShape(region) ? region : ann
+	const { regionId, targetIds } = metaOf(ann)
+	const target = regionId ?? (targetIds?.length === 1 ? targetIds[0] : undefined)
+	const found = target ? txn.get(target as TLShape['id']) : undefined
+	return found && isShape(found) && rectOf(found) ? found : ann
 }
 
-// A reply reads best directly under what it answers, so try below before right.
+const REPLY_SLIDE = 1600 // how far below its anchor a reply may slide before the sides are considered
+const ROW = 40
+const DRIFT = [0, 1, -1, 2, -2, 3, -3, 4, -4, 5, -5, 6, -6, 7, -7, 8, -8].map((n) => n * ROW)
+
+// A reply belongs directly under what it answers. If that spot is taken it slides further down (drifting a little
+// sideways), instead of jumping above or beside the thing it answers. Only a column blocked for REPLY_SLIDE falls
+// back to the sides.
 function replySpot(obstacles: Rect[], segments: Segment[], anchor: TLShape, w: number, h: number): Rect {
 	const [right, under, left, above] = sidesOf(rectOf(anchor)!, w, h, DIAGRAM_GAP) as [Point, Point, Point, Point]
-	return findFreeRect(obstacles, w, h, { prefer: [under, right, left, above], fallback: under, segments })
+	for (let y = under.y; y <= under.y + REPLY_SLIDE; y += ROW) {
+		for (const dx of DRIFT) if (isFree(obstacles, segments, { x: under.x + dx, y, w, h })) return { x: under.x + dx, y, w, h }
+	}
+	return findFreeRect(obstacles, w, h, { prefer: [right, left, above], fallback: under, segments })
 }
 
 // ---- Pending replies ---------------------------------------------------------------------
@@ -1015,9 +1026,12 @@ export function replyToMark(id: string, text: string) {
 		let spot: Rect
 		if (pending) {
 			// Fill the placeholder in place; the link arrow is already bound to it.
+			// Stays where it is if the answer fits there; a taller answer that no longer fits slides down, never above.
 			const rest = all.filter((r) => r.id !== pending.id)
-			const origin = { x: pending.x, y: pending.y }
-			spot = findFreeRect(obstaclesOn(rest, pageId), w, h, { prefer: [origin], fallback: origin, segments: segmentsOn(rest, pageId) })
+			const taken = obstaclesOn(rest, pageId)
+			const lines = segmentsOn(rest, pageId)
+			const here = { x: pending.x, y: pending.y, w, h }
+			spot = isFree(taken, lines, here) ? here : replySpot(taken, lines, replyAnchor(txn, ann), w, h)
 			const meta = { ...pending.meta }
 			delete meta.status
 			block = { ...pending, x: spot.x, y: spot.y, meta, props: { ...pending.props, w, h, dash: 'solid', fill: 'solid', richText: replyRichText(quote, text) } } as TLShape
