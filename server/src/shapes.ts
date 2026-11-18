@@ -19,7 +19,7 @@ import { z } from 'zod'
 import { safeId, UPLOADS } from './config.ts'
 import { CAPTION_H, MEDIA_CARD, schema } from './mediaCard.ts'
 import { sniffMedia } from './media.ts'
-import { DIAGRAM_GAP, DRAW_M, findFreeRect, GAP, isFree, overlaps, segmentHitsRect, sidesOf, textBlockHeight, type Point, type Rect, type Segment } from './layout.ts'
+import { DIAGRAM_GAP, DRAW_M, findFreeRect, freeRectNear, GAP, isFree, overlaps, segmentHitsRect, sidesOf, textBlockHeight, type Point, type Rect, type Segment } from './layout.ts'
 import { room } from './room.ts'
 import { getUiContext } from './uiContext.ts'
 
@@ -1067,19 +1067,18 @@ function replyAnchor(txn: Txn, ann: TLShape): TLShape {
 	return found && isShape(found) && rectOf(found) ? found : ann
 }
 
-const REPLY_SLIDE = 1600 // how far below its anchor a reply may slide before the sides are considered
-const ROW = 40
-const DRIFT = [0, 1, -1, 2, -2, 3, -3, 4, -4, 5, -5, 6, -6, 7, -7, 8, -8].map((n) => n * ROW)
+const REPLY_REACH = 1600 // how far from the anchor and the mark a reply may land before anywhere on the page will do
 
-// A reply belongs directly under what it answers. If that spot is taken it slides further down (drifting a little
-// sideways), instead of jumping above or beside the thing it answers. Only a column blocked for REPLY_SLIDE falls
-// back to the sides.
-function replySpot(obstacles: Rect[], segments: Segment[], anchor: TLShape, w: number, h: number): Rect {
+// A reply belongs directly under what it answers. If that spot is taken (say by the reply to another mark on the
+// same thing), it takes the nearest free spot between there and under its own mark, e.g. beside the other reply,
+// rather than queueing further down the column, away from the question.
+function replySpot(obstacles: Rect[], segments: Segment[], anchor: TLShape, mark: TLShape, w: number, h: number): Rect {
 	const [right, under, left, above] = sidesOf(rectOf(anchor)!, w, h, DIAGRAM_GAP) as [Point, Point, Point, Point]
-	for (let y = under.y; y <= under.y + REPLY_SLIDE; y += ROW) {
-		for (const dx of DRIFT) if (isFree(obstacles, segments, { x: under.x + dx, y, w, h })) return { x: under.x + dx, y, w, h }
-	}
-	return findFreeRect(obstacles, w, h, { prefer: [right, left, above], fallback: under, segments })
+	const underMark = sidesOf(rectOf(mark)!, w, h, DIAGRAM_GAP)[1]!
+	return (
+		freeRectNear(obstacles, segments, w, h, under, underMark, REPLY_REACH) ??
+		findFreeRect(obstacles, w, h, { prefer: [right, left, above], fallback: under, segments })
+	)
 }
 
 // ---- Pending replies ---------------------------------------------------------------------
@@ -1115,7 +1114,7 @@ export function reservePendingReplies() {
 			}
 			const taken = obstacles.get(pageId)!
 			const anchor = replyAnchor(txn, ann)
-			const spot = replySpot(taken, lines.get(pageId)!, anchor, BLOCK_WIDTH, PENDING_H)
+			const spot = replySpot(taken, lines.get(pageId)!, anchor, ann, BLOCK_WIDTH, PENDING_H)
 			taken.push(spot)
 			const index = getIndexAbove(tops.has(pageId) ? tops.get(pageId) : topIndex(all, pageId))
 			tops.set(pageId, index)
@@ -1155,14 +1154,14 @@ export function replyToMark(id: string, text: string) {
 			const taken = obstaclesOn(rest, pageId)
 			const lines = segmentsOn(rest, pageId)
 			const here = { x: pending.x, y: pending.y, w, h }
-			spot = isFree(taken, lines, here) ? here : replySpot(taken, lines, replyAnchor(txn, ann), w, h)
+			spot = isFree(taken, lines, here) ? here : replySpot(taken, lines, replyAnchor(txn, ann), ann, w, h)
 			const meta = { ...pending.meta }
 			delete meta.status
 			block = { ...pending, x: spot.x, y: spot.y, meta, props: { ...pending.props, w, h, dash: 'solid', fill: 'solid', richText: replyRichText(text) } } as TLShape
 			txn.set(block.id, block)
 		} else {
 			const anchor = replyAnchor(txn, ann)
-			spot = replySpot(obstaclesOn(all, pageId), segmentsOn(all, pageId), anchor, w, h)
+			spot = replySpot(obstaclesOn(all, pageId), segmentsOn(all, pageId), anchor, ann, w, h)
 			const index = getIndexAbove(topIndex(all, pageId))
 			block = buildAgentBlock(text, spot, { pageId, index, meta: { author: 'agent', kind: 'agent-reply', replyTo: ann.id } }, quote)
 			txn.set(block.id, block)

@@ -105,6 +105,32 @@ export function isFree(obstacles: Rect[], segments: Segment[], r: Rect, gap = GA
 	return !segments.some(([a, b]) => segmentHitsRect(a, b, padded))
 }
 
+// The free w x h spot whose top-left is closest to both `a` and `b` (sum of the two distances), searched on a STEP
+// grid that reaches `reach` past them and never goes above the higher of the two. `a` itself wins when it is free,
+// since nothing scores better. Null when nothing in reach is free.
+export function freeRectNear(obstacles: Rect[], segments: Segment[], w: number, h: number, a: Point, b: Point, reach: number): Rect | null {
+	const score = (x: number, y: number) => Math.hypot(x - a.x, y - a.y) + Math.hypot(x - b.x, y - b.y)
+	let best: Rect | null = null
+	let bestScore = Infinity
+	const consider = (x: number, y: number) => {
+		const s = score(x, y)
+		if (s >= bestScore) return
+		const r = { x, y, w, h }
+		if (isFree(obstacles, segments, r)) {
+			best = r
+			bestScore = s
+		}
+	}
+	consider(a.x, a.y)
+	consider(b.x, b.y)
+	const top = Math.min(a.y, b.y)
+	const left = Math.min(a.x, b.x) - reach
+	for (let y = top; y <= Math.max(a.y, b.y) + reach; y += STEP) {
+		for (let x = left; x <= Math.max(a.x, b.x) + reach; x += STEP) consider(x, y)
+	}
+	return best
+}
+
 export interface Placement {
 	/** Tried first, in order. The first one that is free wins. */
 	prefer: Point[]
