@@ -13,10 +13,9 @@ const usage = (dir = resolveDataDir()) => `canvas-idea ${pkg.version} — local 
 Usage: canvas-idea [command] [options]
 
 Commands:
-  start     Start the server (default)
+  start     Start the server (default); if it already runs, open the unlock link
   stop      Stop the detached server
   status    Show whether the server answers, the link, data dir and chat state
-  open      Open the unlock link in the default browser
   url       Print the unlock link
   token     Print the chat token
 
@@ -192,7 +191,7 @@ const stop = () => {
 const chatState = async () => {
 	let res
 	try {
-		res = await fetch(`${baseUrl}/api/chat/status?token=${await token()}`, { signal: AbortSignal.timeout(3000) })
+		res = await fetch(`${baseUrl}/api/chat/status`, { headers: { cookie: `canvas_chat_${port}=${await token()}` }, signal: AbortSignal.timeout(3000) })
 	} catch (err) {
 		return `unreachable (${err.message})`
 	}
@@ -236,13 +235,6 @@ const status = async () => {
 	if (up) console.log(`chat     ${await chatState()}`)
 }
 
-const open = async () => {
-	if (!(await answers(`${baseUrl}/`))) fail(`server is not running at ${baseUrl} — start it with: canvas-idea start`)
-	const link = await unlockLink()
-	openBrowser(link)
-	console.log(link)
-}
-
 const command = positionals[0] ?? 'start'
 if (positionals.length > 1) fail(`unexpected argument: ${positionals[1]}`, 2)
 
@@ -255,9 +247,6 @@ switch (command) {
 		break
 	case 'status':
 		await status()
-		break
-	case 'open':
-		await open()
 		break
 	case 'url':
 		console.log(await unlockLink())

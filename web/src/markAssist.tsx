@@ -1,15 +1,19 @@
 import {
+	NoteShapeUtil,
+	stopEventPropagation,
 	TldrawUiMenuGroup,
 	TldrawUiMenuItem,
 	useEditor,
 	useValue,
 	createShapeId,
 	type Editor,
+	type TLNoteShape,
 	type TLShape,
 	type TLShapeId,
 	type TLUiActionsContextType,
 } from 'tldraw'
 import type { JSX } from 'react'
+import './markAssist.css'
 import { chat, useChat } from './chat/store.ts'
 import { answeredMarks, countItems, countOpenMarks, hasText, isOpenMark, markSelection, openMarksWithText, repliesToMark } from './marks.ts'
 
@@ -138,8 +142,6 @@ export function OpenMarksPill(): JSX.Element {
 	const editor = useEditor()
 	const open = useValue('open marks', () => countOpenMarks(editor), [editor])
 	const items = useValue('item count', () => countItems(editor), [editor])
-	const usable = useChat((s) => s.availability.kind === 'ready' && s.connected)
-	const running = useChat((s) => s.running)
 	const pink = open > 0
 	return (
 		<span
@@ -164,27 +166,52 @@ export function OpenMarksPill(): JSX.Element {
 			) : (
 				<span>{open} open marks</span>
 			)}
-			{usable && (
-				<button
-					type="button"
-					title="Ask the agent to answer your open marks"
-					disabled={running}
-					onClick={() => {
-						chat.openPanel()
-						chat.prompt('Answer my open marks')
-					}}
-					style={{
-						...pillButton,
-						textDecoration: 'none',
-						border: '1px solid var(--tl-color-low-border)',
-						borderRadius: 6,
-						padding: '2px 8px',
-						opacity: running ? 0.5 : 1,
-					}}
-				>
-					Ask agent
-				</button>
-			)}
 		</span>
+	)
+}
+
+// Marks are tldraw notes, so the note util draws the button inside the shape (as tldraw does for a note's link button).
+export class MarkNoteShapeUtil extends NoteShapeUtil {
+	override component(shape: TLNoteShape) {
+		return (
+			<>
+				{super.component(shape)}
+				{isOpenMark(shape) && hasText(shape) && <MarkAskButton id={shape.id} />}
+			</>
+		)
+	}
+}
+
+/**
+ * "Ask" badge on an open mark's corner: the agent answers that mark only. Same size, spot and hand-drawn look as the
+ * green ✓ an answered mark gets (server/src/shapes.ts addBadge), so the badge just turns from "ask" into "done".
+ */
+function MarkAskButton({ id }: { id: TLShapeId }): JSX.Element | null {
+	const usable = useChat((s) => s.availability.kind === 'ready' && s.connected)
+	const running = useChat((s) => s.running)
+	if (!usable) return null
+	return (
+		<button
+			type="button"
+			className="mark-ask"
+			title="Ask the agent to answer this mark"
+			aria-label="Ask the agent to answer this mark"
+			disabled={running}
+			// The canvas would otherwise take the press as select/drag of the note.
+			onPointerDown={stopEventPropagation}
+			onClick={() => {
+				chat.openPanel()
+				chat.prompt(`Answer only the open mark ${id}; leave the other marks alone.`)
+			}}
+		>
+			<svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+				{/* A pen circle that overshoots where it started, like the ✓ badge's drawn ring. */}
+				<path
+					className="mark-ask__disc"
+					d="M21.5 3.2C31 3.6 37 11 36.6 20.4 36.2 30 29 36.9 19.6 36.6 10.4 36.3 3.3 29.2 3.5 20 3.7 11.2 10 4 18.6 3.4c1.4-.1 3.8.1 5 1"
+				/>
+				<path d="M20.2 28.2 20.4 12.6M13.6 18.8l6.8-6.6 6.4 6.3" />
+			</svg>
+		</button>
 	)
 }

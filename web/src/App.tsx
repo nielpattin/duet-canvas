@@ -20,7 +20,7 @@ import { ChatPanel, ChatToggle } from './chat/ChatPanel.tsx'
 import { setDarkMode } from './chat/theme.ts'
 import { onBridgeMessage, setBridgeEditor } from './bridge.ts'
 import { keepMarksTidy, reopenEditedMarks } from './marks.ts'
-import { addMarkActions, MarkMenuItems, markTranslations, OpenMarksPill } from './markAssist.tsx'
+import { addMarkActions, MarkMenuItems, MarkNoteShapeUtil, markTranslations, OpenMarksPill } from './markAssist.tsx'
 import { MarkTool } from './MarkTool.ts'
 import { convertUserMediaToCards, MediaCardShapeUtil } from './mediaCard.tsx'
 import { pushContextToServer } from './pushContext.ts'
@@ -38,7 +38,7 @@ const assets: TLAssetStore = {
 	resolve: (asset) => asset.props.src,
 }
 
-const shapeUtils = [MediaCardShapeUtil]
+const shapeUtils = [MediaCardShapeUtil, MarkNoteShapeUtil]
 // The sync store builds its own schema, so unlike <Tldraw shapeUtils> it needs the built-in shapes listed too.
 const syncShapeUtils = [...defaultShapeUtils, MediaCardShapeUtil]
 const tools = [MarkTool]

@@ -6,6 +6,7 @@ import { serve } from '@hono/node-server'
 import { serveStatic } from '@hono/node-server/serve-static'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { Hono } from 'hono'
+import { getCookie, setCookie } from 'hono/cookie'
 import { getMimeType } from 'hono/utils/mime'
 import { WebSocketServer } from 'ws'
 import { ALLOWED_HOSTS, HOST, IN_DOCKER, PORT, safeId, UPLOADS, WEB_DIST } from './config.ts'
@@ -38,6 +39,11 @@ const originAllowed = (origin: string | undefined) => {
 // Chat drives the user's own omp, so it only exists for a native run, never in the container.
 const chat = IN_DOCKER ? undefined : new ChatHub()
 
+// The browser holds the chat token as an HttpOnly cookie. Cookies ignore the port, so one unlock also covers the Vite
+// dev server on the same host; the server's port is in the name so two servers on one host do not overwrite each other.
+const CHAT_COOKIE = `canvas_chat_${PORT}`
+const chatCookie = (header: string | undefined) => new RegExp(`(?:^|;\\s*)${CHAT_COOKIE}=([^;]*)`).exec(header ?? '')?.[1]
+
 const app = new Hono()
 
 // DNS-rebinding guard: a malicious website must not be able to reach the editing tools.
@@ -58,9 +64,18 @@ app.all('/mcp', async (c) => {
 
 app.get('/api/chat/status', async (c) => {
 	if (!chat) return c.json({ kind: 'off' })
-	if (!tokenOk(c.req.query('token'))) return c.json({ kind: 'locked' })
+	if (!tokenOk(getCookie(c, CHAT_COOKIE))) return c.json({ kind: 'locked' })
 	const omp = await detectOmp()
 	return c.json(omp.ok ? { kind: 'ready', version: omp.version } : { kind: 'no-omp', message: omp.message })
+})
+
+// Swaps the code from the unlock link (or pasted into the chat panel) for the cookie.
+app.post('/api/chat/unlock', async (c) => {
+	const body = (await c.req.json().catch(() => null)) as { token?: unknown } | null
+	const token = typeof body?.token === 'string' ? body.token : undefined
+	if (!chat || !tokenOk(token)) return c.json({ ok: false }, 403)
+	setCookie(c, CHAT_COOKIE, token!, { httpOnly: true, sameSite: 'Strict', path: '/', maxAge: 400 * 24 * 60 * 60 })
+	return c.json({ ok: true })
 })
 
 // The browser tells us what the user has selected / is looking at.
@@ -118,7 +133,7 @@ app.use('*', serveStatic({ root: relative(process.cwd(), WEB_DIST) }))
 const httpServer = serve({ fetch: app.fetch, port: PORT, hostname: HOST }, (info) => {
 	console.log(`canvas  http://${HOST}:${info.port}`)
 	console.log(`mcp     http://${HOST}:${info.port}/mcp`)
-	// The link that unlocks the agent chat in a browser (the token is stored there on first visit).
+	// The link that unlocks the agent chat in a browser (it swaps the code for a cookie on first visit).
 	if (chat) console.log(`chat    http://${HOST === '0.0.0.0' ? '127.0.0.1' : HOST}:${info.port}/?chat=${chatToken()}`)
 })
 
@@ -126,7 +141,7 @@ const httpServer = serve({ fetch: app.fetch, port: PORT, hostname: HOST }, (info
 const wss = new WebSocketServer({ noServer: true })
 httpServer.on('upgrade', (req, socket, head) => {
 	const url = new URL(req.url ?? '/', 'http://localhost')
-	if (url.pathname === '/chat' && chat && hostAllowed(req.headers.host) && originAllowed(req.headers.origin) && tokenOk(url.searchParams.get('token'))) {
+	if (url.pathname === '/chat' && chat && hostAllowed(req.headers.host) && originAllowed(req.headers.origin) && tokenOk(chatCookie(req.headers.cookie))) {
 		wss.handleUpgrade(req, socket, head, (ws) => chat.add(ws))
 		return
 	}

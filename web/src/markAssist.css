@@ -1,0 +1,25 @@
+/* Same 40px badge as the answered ✓, pushed further off the note's top-right corner so it clears the note's edge. */
+.mark-ask {
+	position: absolute;
+	top: -30px;
+	right: -30px;
+	z-index: 2; /* tldraw's .tl-note__container is z-index 1 */
+	width: 40px;
+	height: 40px;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: #6d4aff;
+	cursor: pointer;
+	pointer-events: all;
+	transition: transform 120ms ease-out;
+}
+.mark-ask svg { display: block; }
+.mark-ask__disc { fill: var(--tl-color-background); transition: fill 120ms ease-out; }
+.mark-ask:hover:not(:disabled) .mark-ask__disc { fill: color-mix(in oklch, #6d4aff 16%, var(--tl-color-background)); }
+.mark-ask:active:not(:disabled) { transform: scale(0.97); }
+.mark-ask:focus-visible { outline: 2px solid #6d4aff; outline-offset: 2px; border-radius: 50%; }
+.mark-ask:disabled { opacity: 0.45; cursor: default; }
+@media (prefers-reduced-motion: reduce) {
+	.mark-ask, .mark-ask__disc { transition: none; }
+}

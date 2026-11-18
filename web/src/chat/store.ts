@@ -68,20 +68,25 @@ type ServerMessage =
 	| { t: 'error'; message: string }
 
 const OPEN_KEY = 'canvas.chat.open'
-const TOKEN_KEY = 'canvas.chat.token'
+// Older builds kept the token here; it is handed to the server once and dropped.
+const LEGACY_TOKEN_KEY = 'canvas.chat.token'
 
-// The unlock link carries the token once (?chat=...); keep it for later visits and strip it from the address bar.
-function initToken() {
+// Trades an unlock code for the server's HttpOnly cookie, so page scripts never hold the token.
+const unlock = async (token: string) =>
+	(await fetch('/api/chat/unlock', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token }) })).ok
+
+// The unlock link carries the code once (?chat=...); strip it from the address bar.
+function takeLinkToken() {
 	const url = new URL(location.href)
 	const fromLink = url.searchParams.get('chat')
 	if (fromLink) {
-		localStorage.setItem(TOKEN_KEY, fromLink)
 		url.searchParams.delete('chat')
 		history.replaceState(null, '', url)
 	}
-	return localStorage.getItem(TOKEN_KEY) ?? ''
+	const legacy = localStorage.getItem(LEGACY_TOKEN_KEY)
+	localStorage.removeItem(LEGACY_TOKEN_KEY)
+	return fromLink ?? legacy
 }
-const token = initToken()
 
 let state: ChatState = {
 	availability: { kind: 'checking' },
@@ -175,7 +180,7 @@ function onServer(m: ServerMessage) {
 }
 
 function connect() {
-	const socket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/chat?token=${encodeURIComponent(token)}`)
+	const socket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/chat`)
 	ws = socket
 	socket.onopen = () => set({ connected: true, error: null })
 	socket.onmessage = (e) => onServer(JSON.parse(e.data))
@@ -189,7 +194,7 @@ function connect() {
 
 async function check() {
 	try {
-		const availability: Availability = await (await fetch(`/api/chat/status?token=${encodeURIComponent(token)}`)).json()
+		const availability: Availability = await (await fetch('/api/chat/status')).json()
 		set({ availability })
 		if (availability.kind === 'ready' && !ws) connect()
 	} catch {
@@ -198,7 +203,11 @@ async function check() {
 		else setTimeout(check, 2000)
 	}
 }
-void check()
+void (async () => {
+	const linkToken = takeLinkToken()
+	if (linkToken) await unlock(linkToken).catch(() => false)
+	await check()
+})()
 
 function send(mode: 'steer' | 'followUp') {
 	const { text, images } = state.draft
@@ -210,6 +219,14 @@ function send(mode: 'steer' | 'followUp') {
 
 export const chat = {
 	recheck: check,
+	// Accepts the whole unlock link or just its code; false when the server rejects it.
+	async unlock(input: string) {
+		const text = input.trim()
+		const code = text.includes('chat=') ? (new URL(text, location.href).searchParams.get('chat') ?? '') : text
+		const ok = code !== '' && (await unlock(code).catch(() => false))
+		if (ok) await check()
+		return ok
+	},
 	toggle() {
 		const open = !state.open
 		localStorage.setItem(OPEN_KEY, open ? '1' : '0')

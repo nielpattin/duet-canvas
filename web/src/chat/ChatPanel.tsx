@@ -48,14 +48,7 @@ export function ChatPanel() {
 					<CloseIcon size={16} />
 				</button>
 			</header>
-			{kind === 'locked' && (
-				<div className="chat-empty">
-					<p>This browser is not unlocked for the agent chat. Open the link printed by <code>canvas-idea start</code>, or run <code>canvas-idea open</code>.</p>
-					<button type="button" className="chat-link" onClick={chat.recheck}>
-						Check again
-					</button>
-				</div>
-			)}
+			{kind === 'locked' && <Unlock />}
 			{availability.kind === 'no-omp' && (
 				<div className="chat-empty">
 					<p>{availability.message}</p>
@@ -66,6 +59,38 @@ export function ChatPanel() {
 			)}
 			{kind === 'ready' && <Conversation />}
 		</aside>
+	)
+}
+
+// One unlock per browser and host: the server keeps it in a cookie, which covers every port on that host.
+function Unlock() {
+	const [code, setCode] = useState('')
+	const [failed, setFailed] = useState(false)
+	return (
+		<form
+			className="chat-empty chat-unlock"
+			onSubmit={async (e) => {
+				e.preventDefault()
+				setFailed(!(await chat.unlock(code)))
+			}}
+		>
+			<p>
+				Unlock the agent chat in this browser: run <code>canvas-idea start</code>, or paste the <code>chat</code> link it printed.
+			</p>
+			<input
+				aria-label="Unlock link or code"
+				placeholder="http://…/?chat=…"
+				value={code}
+				onChange={(e) => {
+					setCode(e.target.value)
+					setFailed(false)
+				}}
+			/>
+			{failed && <p role="alert">That link or code does not match this server.</p>}
+			<button type="submit" className="chat-link" disabled={!code.trim()}>
+				Unlock
+			</button>
+		</form>
 	)
 }
 

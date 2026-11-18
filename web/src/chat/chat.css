@@ -73,6 +73,7 @@
 
 .chat-empty { color: var(--muted); padding: 14px; }
 .chat-empty p { margin: 0 0 12px; max-width: 34ch; }
+.chat-unlock input { display: block; width: 100%; box-sizing: border-box; margin-bottom: 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font: inherit; }
 .chat-suggestions { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .chat-suggestions button { width: 100%; text-align: left; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--ink); }
 .chat-suggestions button:hover { background: var(--surface); }
