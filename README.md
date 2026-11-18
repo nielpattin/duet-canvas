@@ -3,15 +3,27 @@
 A local tldraw canvas that you use in the browser **and** your coding agent edits over MCP.
 The server owns the canvas (SQLite), so the agent can read and edit it with the browser closed.
 
+Any MCP client (Claude Code, omp, ...) can connect to it. The web app also has a built-in chat panel that drives [omp](https://github.com/can1357/oh-my-pi). You draw, mark things you want help with, and the agent answers next to them on the canvas.
+
+Status: early (0.1). Expect rough edges. It is a local, single-user tool.
+
 ```
 agent --MCP (HTTP)--> server (TLSocketRoom + SQLite) <--WebSocket-- browser (normal tldraw)
                                 ^
                                 +-- POST /api/context: selection + viewport from the browser
 ```
 
+## Requirements
+
+- Node.js 24 (the server runs TypeScript directly) and pnpm 12.
+- A browser tab open on the app, for `capture` (tldraw renders only in a browser).
+- Optional: [omp](https://github.com/can1357/oh-my-pi) on your `PATH` for the in-app chat. Not needed if you only connect an MCP client.
+- Optional: Docker, to run the server without Node.
+
 ## Run
 
 ```sh
+git clone <this repo> && cd canvas-idea
 pnpm install
 pnpm dev          # web http://localhost:5173 (use this one), server on :5858
 # or production-style:
@@ -56,9 +68,39 @@ canvas-idea start --port 5859 --data-dir D:\canvas
 
 ## Connect your agent
 
+**omp:** add the server to `.omp/mcp.json` in your project, or to `~/.omp/agent/mcp.json` to have it everywhere. This repo already ships the project-level file, so omp started here just works.
+
+```json
+{
+  "mcpServers": {
+    "canvas": { "type": "http", "url": "http://127.0.0.1:5858/mcp", "enabled": true }
+  }
+}
+```
+
+**Claude Code:**
+
 ```sh
 claude mcp add --transport http canvas http://localhost:5858/mcp
 ```
+
+**Codex:**
+
+```sh
+codex mcp add canvas --url http://localhost:5858/mcp
+```
+
+**OpenCode:** add this to `opencode.json` in your project (or your global OpenCode config):
+
+```json
+{
+  "mcp": {
+    "canvas": { "type": "remote", "url": "http://localhost:5858/mcp", "enabled": true }
+  }
+}
+```
+
+Any other MCP client that speaks streamable HTTP works with the same URL.
 
 Tools: `get_context`, `get_canvas` (one page at a time), `get_changes`, `list_marks`, `reply_to_mark`, `resolve_mark`,
 `add_text_block`, `capture`, `create_page`, `create_shapes`, `update_shapes`, `delete_shapes`, `view_image`, `add_media`.
@@ -99,7 +141,24 @@ The default is `%APPDATA%\canvas-idea` on Windows, `~/Library/Application Suppor
 
 ## Security
 
-Binds to 127.0.0.1 and rejects unknown `Host` headers. There is no auth: do not expose it beyond localhost
-without adding some. Extra hosts: `ALLOWED_HOSTS=a.local,b.local`.
+Binds to 127.0.0.1 and rejects unknown `Host` headers and cross-origin requests. Extra hosts: `ALLOWED_HOSTS=a.local,b.local`.
 
-tldraw needs a license key for production use (the watermark shows without one).
+- **The MCP endpoint (`/mcp`) and the canvas have no auth.** Anyone who can reach the port can read and edit the canvas. Do not expose it beyond localhost without putting authentication in front of it (the Docker compose file publishes the port on loopback only).
+- **The chat is protected by a token** (see above), because it drives an agent on your machine. Never share the unlock link; run `canvas-idea rotate` if it leaks.
+- The chat agent runs with `--yolo` but only has the canvas tools. Your own omp MCP servers are switched off for it.
+
+## Development
+
+```sh
+pnpm typecheck                 # all packages
+pnpm --filter server test      # server unit tests
+pnpm --filter web build        # rebuild web/dist (the server serves the built files)
+```
+
+`server/` is the Hono + MCP + tldraw sync server, `web/` is the Vite/React app, `bin/` is the `canvas-idea` CLI.
+
+## License
+
+canvas-idea is [MIT](LICENSE).
+
+[tldraw](https://tldraw.dev), which it is built on, is not open source and has its own license. Its SDK needs a license for production use; without a key it shows a "Made with tldraw" watermark. See the [tldraw license](https://github.com/tldraw/tldraw/blob/main/LICENSE.md) before you deploy this or build on it. This repo does not include a tldraw license key.
