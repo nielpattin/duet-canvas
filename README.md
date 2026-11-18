@@ -24,7 +24,7 @@ agent --MCP (HTTP)--> server (TLSocketRoom + SQLite) <--WebSocket-- browser (nor
 ## Run
 
 ```sh
-git clone <this repo> && cd duet-canvas
+git clone https://github.com/nielpattin/duet-canvas.git && cd duet-canvas
 pnpm install
 pnpm dev          # web http://localhost:5173 (use this one), server on :5858
 # or production-style:
