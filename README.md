@@ -3,7 +3,7 @@
 A local tldraw canvas that you use in the browser **and** your coding agent edits over MCP.
 The server owns the canvas (SQLite), so the agent can read and edit it with the browser closed.
 
-Any MCP client (Claude Code, omp, ...) can connect to it. The web app also has a built-in chat panel that drives [omp](https://github.com/can1357/oh-my-pi). You draw, mark things you want help with, and the agent answers next to them on the canvas.
+Any MCP client (Claude Code, omp, ...) can connect to it. The web app also has a built-in chat panel that drives [omp](https://github.com/can1357/oh-my-pi), Claude Code, Codex or opencode, whichever you pick. You draw, mark things you want help with, and the agent answers next to them on the canvas.
 
 Status: early (0.1). Expect rough edges. It is a local, single-user tool.
 
@@ -17,7 +17,7 @@ agent --MCP (HTTP)--> server (TLSocketRoom + SQLite) <--WebSocket-- browser (nor
 
 - Node.js 24 (the server runs TypeScript directly) and pnpm 12.
 - A browser tab open on the app, for `capture` (tldraw renders only in a browser).
-- Optional: [omp](https://github.com/can1357/oh-my-pi) on your `PATH` for the in-app chat. Not needed if you only connect an MCP client.
+- Optional: one or more of [omp](https://github.com/can1357/oh-my-pi), [Claude Code](https://code.claude.com), [Codex](https://github.com/openai/codex) or [opencode](https://opencode.ai) on your `PATH`, each already signed in, for the in-app chat. Not needed if you only connect an MCP client.
 - Optional: Docker, to run the server without Node.
 
 ## Run
@@ -34,11 +34,16 @@ docker compose up --build
 
 ## Agent chat (native only)
 
-The web app has an **Agent chat** panel that drives your own `omp` over its RPC mode (omp must be on your `PATH`, or set `OMP_BIN`). The server starts omp on first use and keeps it alive.
+The web app has an **Agent chat** panel that drives your own agent CLI. The agent's name at the top left of the panel is a dropdown: pick omp, Claude Code, Codex or opencode (CLIs that are not found are listed greyed out). Each must be on your `PATH`, or set `OMP_BIN`, `CLAUDE_BIN`, `CODEX_BIN`, `OPENCODE_BIN`. The server starts the CLI on first use; the choice, and each agent's last model and effort, are remembered.
 
 ```
-browser --WS /chat?token--> server --stdio JSONL--> omp --mode rpc --MCP http--> server (canvas)
+browser --WS /chat?token--> server --stdio--> omp --mode rpc            --MCP http--> server (canvas)
+                                         |--> claude -p (one process per turn, stream-json)
+                                         |--> codex app-server (JSON-RPC)
+                                         '--> opencode acp (Agent Client Protocol)
 ```
+
+**Sign-in stays with each CLI.** This app never reads, stores or forwards their credentials: sign in yourself (`claude login`, `codex login`, `opencode auth login`) and the CLI uses its own. That is also what the vendors' terms require: Claude Code must run unmodified with the user's own login, and Codex's app-server sign-in is for local use only, never for a hosted service. Do not host this chat for other people.
 
 ### Run it with the CLI
 
@@ -57,12 +62,16 @@ canvas-idea start --port 5859 --data-dir D:\canvas
 ### What it does
 
 - **Docker has no chat.** A container cannot see your omp, so the button is hidden there (the image sets `CANVAS_DOCKER=1`). Docker stays the way to give MCP clients the canvas.
-- **The chat agent only has the canvas tools.** omp runs with `--no-tools`, `tools.xdev: false`, no extensions/skills/rules/context files, and `--yolo`: no bash, edit, eval or filesystem access. Servers from your own `~/.omp/agent/mcp.json` are switched off for the chat (a project-level `enabled: false` stub per name); a warning shows if any other tool still gets through.
-- **Keys** (same as omp): Enter sends, and steers a running agent; Alt+Enter queues a follow-up for after the run; Esc stops (queued text returns to the box). Queued messages show as chips.
-- **Model and effort** come from omp. The picker shows one provider at a time with a search across all. Changing either mid-chat keeps the same session; the provider's prompt cache restarts for that turn.
+- **The chat agent only has the canvas tools, as far as each CLI allows.**
+  - omp runs with `--no-tools`, `tools.xdev: false`, no extensions/skills/rules/context files, and `--yolo`: no bash, edit, eval or filesystem access. Servers from your own `~/.omp/agent/mcp.json` are switched off for the chat (a project-level `enabled: false` stub per name); a warning shows if any other tool still gets through.
+  - Claude Code runs with `--tools ""`, only the canvas MCP server (`--strict-mcp-config`), no user settings, CLAUDE.md files or memory.
+  - opencode runs a `canvas` agent (project config in the workspace) that denies every tool except the canvas MCP server's. Your own global opencode instructions and plugins still load.
+  - Codex cannot drop its own shell and file tools. It runs with a read-only sandbox and nothing is ever approved; your own MCP servers from `~/.codex/config.toml` still load.
+- **Keys** (same as omp): Enter sends, and steers a running agent; Alt+Enter queues a follow-up for after the run; Esc stops (queued text returns to the box). Queued messages show as chips. omp and Codex deliver a steer inside the running turn; Claude Code and opencode run it as soon as the turn ends, before follow-ups.
+- **Model and effort** come from the agent (Claude Code: opus, sonnet, haiku or its default). The picker shows one provider at a time with a search across all. Changing either mid-chat keeps the same chat; the provider's prompt cache restarts for that turn.
 - **Images:** attach, paste or drop (PNG, JPEG, GIF, WebP, up to 6, shrunk to 2000px).
 - **Cost and context** of the current chat show under the box (spend, tokens in context; the bar turns amber, then red).
-- **Chats** are omp sessions in `<data dir>/sessions`. **History** lists and reopens them; **New chat** starts a new session and keeps the old file. Long chats render the newest 30 messages and load more as you scroll up.
+- **Chats** are omp sessions in `<data dir>/sessions`; for the other agents the transcript is a JSON file there and the agent's own session is resumed. **History** lists the chats of the selected agent and reopens them; **New chat** starts a new session and keeps the old file. Long chats render the newest 30 messages and load more as you scroll up.
 - **Marks:** Ctrl+M marks the selection, Shift+M jumps to the next open mark, **Ask agent** (pill and context menu) prompts the agent, **Clear answered marks** tidies up.
 - The panel follows tldraw's light/dark/system theme.
 

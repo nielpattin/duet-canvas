@@ -26,17 +26,22 @@ export type Usage = {
 type CurrentModel = { provider: string; id: string; name: string }
 export type { Attachment }
 
-// 'off': no chat here (a Docker server cannot reach the user's omp). 'locked': native server, but this browser has no
-// token yet. 'no-omp': native server, omp not found.
+export type AgentId = 'omp' | 'claude' | 'codex' | 'opencode'
+export type AgentInfo = { id: AgentId; label: string } & ({ ok: true; version: string } | { ok: false; message: string })
+
+// 'off': no chat here (a Docker server cannot reach the user's agent CLIs). 'locked': native server, but this browser
+// has no token yet. 'no-agent': native server, none of the supported agent CLIs found.
 export type Availability =
 	| { kind: 'checking' }
 	| { kind: 'off' }
 	| { kind: 'locked' }
-	| { kind: 'no-omp'; message: string }
-	| { kind: 'ready'; version: string }
+	| { kind: 'no-agent'; message: string }
+	| { kind: 'ready'; agents: AgentInfo[] }
 
 export type ChatState = {
 	availability: Availability
+	/** The agent the server runs the chat on; null until the socket has said. */
+	agent: AgentId | null
 	connected: boolean
 	open: boolean
 	running: boolean
@@ -57,6 +62,7 @@ export type ChatState = {
 }
 
 type ServerMessage =
+	| { t: 'agent'; agent: AgentId }
 	| { t: 'state'; model: CurrentModel | null; thinking: string | null; levels: string[]; running: boolean; queue: Queue; usage: Usage; extraTools: string[] }
 	| { t: 'history'; messages: WireMessage[] }
 	| { t: 'message'; id: string; message: WireMessage; done: boolean }
@@ -90,6 +96,7 @@ function takeLinkToken() {
 
 let state: ChatState = {
 	availability: { kind: 'checking' },
+	agent: null,
 	connected: false,
 	open: localStorage.getItem(OPEN_KEY) === '1',
 	running: false,
@@ -139,6 +146,10 @@ function revoke(images: Attachment[]) {
 
 function onServer(m: ServerMessage) {
 	switch (m.t) {
+		case 'agent':
+			// Everything below belongs to the agent that was left: models, chats, usage and the conversation.
+			set({ agent: m.agent, model: null, thinking: null, levels: [], models: null, chats: null, items: [], queue: { steering: [], followUp: [] }, usage: null, extraTools: [], running: false, tookMs: null, stopping: false })
+			break
 		case 'state':
 			set({ model: m.model, thinking: m.thinking, levels: m.levels, running: m.running, queue: m.queue, usage: m.usage, extraTools: m.extraTools, stopping: m.running ? state.stopping : false })
 			break
@@ -248,6 +259,7 @@ export const chat = {
 	unqueue: (message: string, queue: 'steering' | 'followUp') => cmd({ t: 'unqueue', message, queue }),
 	promote: (message: string) => cmd({ t: 'promote', message }),
 	newChat: () => cmd({ t: 'new_chat' }),
+	setAgent: (agent: AgentId) => cmd({ t: 'set_agent', agent }),
 	loadChats: () => cmd({ t: 'chats' }),
 	openChat: (id: string) => cmd({ t: 'open_chat', id }),
 	deleteChat: (id: string) => cmd({ t: 'delete_chat', id }),

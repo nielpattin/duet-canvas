@@ -12,7 +12,8 @@ import { WebSocketServer } from 'ws'
 import { ALLOWED_HOSTS, HOST, IN_DOCKER, PORT, safeId, UPLOADS, WEB_DIST } from './config.ts'
 import { answerFromBrowser } from './bridge.ts'
 import { chatToken, tokenOk } from './chat/auth.ts'
-import { ChatHub, detectOmp } from './chat/hub.ts'
+import { detectAgents } from './chat/agents.ts'
+import { ChatHub } from './chat/hub.ts'
 import { buildMcpServer } from './mcp.ts'
 import { closeRoom, room } from './room.ts'
 import { migrateAnsweredMarks, migrateArrowsBehind, migrateLegacyMarks } from './shapes.ts'
@@ -65,8 +66,9 @@ app.all('/mcp', async (c) => {
 app.get('/api/chat/status', async (c) => {
 	if (!chat) return c.json({ kind: 'off' })
 	if (!tokenOk(getCookie(c, CHAT_COOKIE))) return c.json({ kind: 'locked' })
-	const omp = await detectOmp()
-	return c.json(omp.ok ? { kind: 'ready', version: omp.version } : { kind: 'no-omp', message: omp.message })
+	const agents = await detectAgents()
+	if (agents.some((a) => a.ok)) return c.json({ kind: 'ready', agents })
+	return c.json({ kind: 'no-agent', message: 'No chat agent found. Install omp, Claude Code, Codex or opencode (or set OMP_BIN, CLAUDE_BIN, CODEX_BIN, OPENCODE_BIN).', agents })
 })
 
 // Swaps the code from the unlock link (or pasted into the chat panel) for the cookie.

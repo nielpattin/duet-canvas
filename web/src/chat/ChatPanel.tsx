@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react'
 import './chat.css'
 import { CloseIcon } from '../icons.tsx'
+import { AgentPicker } from './AgentPicker.tsx'
 import { Composer } from './Composer.tsx'
 import { HistoryPicker } from './HistoryPicker.tsx'
 import { Message } from './Message.tsx'
@@ -15,7 +16,7 @@ const WINDOW = 30
 export function ChatToggle() {
 	const kind = useChat((s) => s.availability.kind)
 	const open = useChat((s) => s.open)
-	if (kind !== 'ready' && kind !== 'no-omp' && kind !== 'locked') return null
+	if (kind !== 'ready' && kind !== 'no-agent' && kind !== 'locked') return null
 	return (
 		<button type="button" className="chat-toggle" aria-pressed={open} onClick={chat.toggle}>
 			Agent chat
@@ -29,11 +30,11 @@ export function ChatPanel() {
 	const connected = useChat((s) => s.connected)
 	const dark = useDarkMode()
 	const kind = availability.kind
-	if (!open || (kind !== 'ready' && kind !== 'no-omp' && kind !== 'locked')) return null
+	if (!open || (kind !== 'ready' && kind !== 'no-agent' && kind !== 'locked')) return null
 	return (
 		<aside className="chat" data-theme={dark ? 'dark' : 'light'} aria-label="Agent chat">
 			<header className="chat-head">
-				<h2>Agent</h2>
+				<AgentPicker />
 				{kind === 'ready' && !connected && <span className="chat-muted">Reconnecting…</span>}
 				<span className="chat-spacer" />
 				{kind === 'ready' && (
@@ -49,7 +50,7 @@ export function ChatPanel() {
 				</button>
 			</header>
 			{kind === 'locked' && <Unlock />}
-			{availability.kind === 'no-omp' && (
+			{availability.kind === 'no-agent' && (
 				<div className="chat-empty">
 					<p>{availability.message}</p>
 					<button type="button" className="chat-link" onClick={chat.recheck}>

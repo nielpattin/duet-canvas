@@ -29,7 +29,10 @@ Options:
   -h, --help            Show this help
 
 Environment:
-  OMP_BIN   Path to the omp binary used by the in-app agent chat (default: omp)
+  OMP_BIN       Path to the omp binary used by the in-app agent chat (default: omp)
+  CLAUDE_BIN    Path to the Claude Code binary for the agent chat (default: claude)
+  CODEX_BIN     Path to the Codex binary for the agent chat (default: codex)
+  OPENCODE_BIN  Path to the opencode binary for the agent chat (default: opencode)
 
 Data dir: ${dir}`
 
