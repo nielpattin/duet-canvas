@@ -79,7 +79,12 @@ export class ChatHub {
 
 	#ensure(): Promise<ChatDriver> {
 		if (this.#driver && !this.#driver.closed) return Promise.resolve(this.#driver)
-		this.#starting ??= this.#start().finally(() => (this.#starting = undefined))
+		if (!this.#starting) {
+			const starting: Promise<ChatDriver> = this.#start().finally(() => {
+				if (this.#starting === starting) this.#starting = undefined
+			})
+			this.#starting = starting
+		}
 		return this.#starting
 	}
 
@@ -123,6 +128,11 @@ export class ChatHub {
 		} catch (e) {
 			driver.close()
 			throw e
+		}
+		// The user switched agent while this one was still starting: drop it and answer with the new one.
+		if (!live()) {
+			driver.close()
+			return this.#ensure()
 		}
 		this.#driver = driver
 		return driver
@@ -188,6 +198,7 @@ export class ChatHub {
 		this.#gen++
 		old?.close()
 		this.#driver = undefined
+		this.#starting = undefined
 		if (this.#running) canvasSafely(clearPendingReplies)
 		this.#running = false
 		this.#current = undefined
