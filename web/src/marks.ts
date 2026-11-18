@@ -9,7 +9,7 @@ interface BlockMeta {
 	regionId?: string
 	replyTo?: string
 }
-const metaOf = (s: TLShape) => s.meta as BlockMeta
+export const metaOf = (s: TLShape) => s.meta as BlockMeta
 
 export const isMark = (s: TLShape) => metaOf(s).kind === 'mark'
 export const isRegion = (s: TLShape) => metaOf(s).kind === 'region'

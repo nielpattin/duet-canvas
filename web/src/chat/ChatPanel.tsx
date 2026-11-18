@@ -76,9 +76,12 @@ function toolStates(message: WireMessage, results: Map<string, boolean>, running
 		.join('\n')
 }
 
+const formatTook = (ms: number) => (ms < 60_000 ? `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)}s` : `${Math.floor(ms / 60_000)}m ${Math.round((ms % 60_000) / 1000)}s`)
+
 function Conversation() {
 	const items = useChat((s) => s.items)
 	const running = useChat((s) => s.running)
+	const tookMs = useChat((s) => s.tookMs)
 	const error = useChat((s) => s.error)
 	const extraTools = useChat((s) => s.extraTools)
 	const [limit, setLimit] = useState(WINDOW)
@@ -133,6 +136,7 @@ function Conversation() {
 							Working…
 						</p>
 					)}
+					{!running && tookMs !== null && shown.length > 0 && <p className="chat-muted">Worked for {formatTook(tookMs)}</p>}
 				</div>
 			</div>
 			{error && (

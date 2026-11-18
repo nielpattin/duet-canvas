@@ -79,8 +79,10 @@ LAYOUT
   Lay diagrams out in a grid so arrows run between neighbours without crossing other shapes, and fix any warning
   create_shapes returns.
 - Omit x and y when creating shapes, text blocks and images: the server finds a free spot near the anchor (the "near"
-  shape, or what the user is looking at) and never lands on top of existing content. Explicit coordinates are used
-  as given and you get a warning if they overlap something.
+  shape, or what the user is looking at) and never lands on top of existing content or on the arrows between shapes.
+  Shapes you give explicit x/y form one drawing: if it would land on shapes or arrows, the server slides the whole
+  drawing as a unit to the nearest free space and reports "shifted" (positions in "created" are final).
+  The canvas is infinite, so never squeeze content into gaps between things.
 - get_canvas returns every shape's bounds plus contentBounds, so you can plan where things go. Keep related things
   close, and do not move the user's shapes unless asked.
 `.trim()
@@ -256,7 +258,7 @@ export function buildMcpServer(origin: string) {
 		{
 			description:
 				'Create diagram shapes (boxes, notes, arrows...). Give shapes an `id` so arrows can reference them via from/to ' +
-				'(arrows then bind and follow the shapes). Omit x/y to auto-place in free space. Geo shapes default to 160x100. ' +
+				'(arrows then bind and follow the shapes). Omit x/y to auto-place in free space; if you give x/y for several shapes (a wireframe, a layout) they are treated as one drawing and slid together to free space if they would overlap anything, see `shifted` in the result. Geo shapes default to 160x100. ' +
 				'Shapes joined by arrows get extra room automatically. Arrow `route`: "straight" (default, tidy flows), "curve" (gentle arc, for maps and trees that fan out) or "elbow" (right angles, for loops). An arrow takes `text`: that is its label, drawn on the arrow, so never make a separate text shape for a label. ' +
 				'Read the returned warnings: they flag arrows that pass through other shapes or are too short to see. ' +
 				'Everything created is marked author "agent".',

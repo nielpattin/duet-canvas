@@ -40,6 +40,8 @@ export type ChatState = {
 	connected: boolean
 	open: boolean
 	running: boolean
+	/** How long the last finished run took, in ms; null while running or before any run this session. */
+	tookMs: number | null
 	stopping: boolean
 	model: CurrentModel | null
 	thinking: string | null
@@ -58,7 +60,7 @@ type ServerMessage =
 	| { t: 'state'; model: CurrentModel | null; thinking: string | null; levels: string[]; running: boolean; queue: Queue; usage: Usage; extraTools: string[] }
 	| { t: 'history'; messages: WireMessage[] }
 	| { t: 'message'; id: string; message: WireMessage; done: boolean }
-	| { t: 'running'; running: boolean }
+	| { t: 'running'; running: boolean; ms?: number }
 	| { t: 'queue'; steering: string[]; followUp: string[] }
 	| { t: 'models'; models: ModelInfo[] }
 	| { t: 'chats'; chats: ChatInfo[] }
@@ -86,6 +88,7 @@ let state: ChatState = {
 	connected: false,
 	open: localStorage.getItem(OPEN_KEY) === '1',
 	running: false,
+	tookMs: null,
 	stopping: false,
 	model: null,
 	thinking: null,
@@ -135,7 +138,7 @@ function onServer(m: ServerMessage) {
 			set({ model: m.model, thinking: m.thinking, levels: m.levels, running: m.running, queue: m.queue, usage: m.usage, extraTools: m.extraTools, stopping: m.running ? state.stopping : false })
 			break
 		case 'history':
-			set({ items: m.messages.map((message, i) => ({ id: `h${i}`, message })) })
+			set({ items: m.messages.map((message, i) => ({ id: `h${i}`, message })), tookMs: null })
 			break
 		case 'message': {
 			// Every update carries the whole message so far, so replacing by id is all the reducer needs.
@@ -147,7 +150,7 @@ function onServer(m: ServerMessage) {
 			break
 		}
 		case 'running':
-			set({ running: m.running, stopping: m.running ? state.stopping : false })
+			set({ running: m.running, tookMs: m.running ? null : (m.ms ?? state.tookMs), stopping: m.running ? state.stopping : false })
 			break
 		case 'queue':
 			set({ queue: { steering: m.steering, followUp: m.followUp } })

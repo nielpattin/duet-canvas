@@ -18,7 +18,7 @@ import { z } from 'zod'
 import { safeId, UPLOADS } from './config.ts'
 import { CAPTION_H, MEDIA_CARD, schema } from './mediaCard.ts'
 import { sniffMedia } from './media.ts'
-import { DIAGRAM_GAP, DRAW_M, findFreeRect, GAP, overlaps, segmentHitsRect, sidesOf, textBlockHeight, type Point, type Rect } from './layout.ts'
+import { DIAGRAM_GAP, DRAW_M, findFreeRect, GAP, isFree, overlaps, segmentHitsRect, sidesOf, textBlockHeight, type Point, type Rect, type Segment } from './layout.ts'
 import { room } from './room.ts'
 import { getUiContext } from './uiContext.ts'
 
@@ -89,7 +89,9 @@ export type ShapePatch = z.infer<typeof ShapePatch>
 //          'agent-note'   an agent text block that is not an answer
 //          'link'         an arrow that only connects a reply to what it answers
 //          'region'       the locked dashed box a mark draws around a selection (mark.meta.regionId)
-// status   marks only: 'open' | 'answered'
+// status   marks: 'open' | 'answered'
+//          agent-reply: 'pending' while the agent is still working on it (a dashed "Thinking…" placeholder
+//          that replyToMark later fills in place); no status once it holds the answer
 
 interface BlockMeta {
 	author?: string
@@ -152,7 +154,24 @@ const isPage = (r: TLRecord): r is TLPage => r.typeName === 'page'
 
 type Txn = TLSyncStorageTransaction<TLRecord>
 
-const readAll = (): TLRecord[] => room.storage.transaction((txn) => Array.from(txn.values())).result
+const isPending = (s: TLShape) => metaOf(s).kind === 'agent-reply' && metaOf(s).status === 'pending'
+
+// A pending placeholder with its link arrow(s) and their bindings (or only `only`'s).
+function pendingIds(all: TLRecord[], only?: TLShape): Set<string> {
+	const ids = new Set<string>(all.filter(isShape).filter((s) => (only ? s.id === only.id : isPending(s))).map((s) => s.id))
+	for (const r of all) if (isBinding(r) && ids.has(r.toId)) ids.add(r.fromId)
+	for (const r of all) if (isBinding(r) && (ids.has(r.fromId) || ids.has(r.toId))) ids.add(r.id)
+	return ids
+}
+
+// Everything the agent reads goes through here. It never sees pending placeholders: shown a "Thinking…" block it
+// deleted it as stale, in parallel with filling it, and lost its own answer. They still count as taken space.
+const readAll = (): TLRecord[] =>
+	room.storage.transaction((txn) => {
+		const all = Array.from(txn.values())
+		const hidden = pendingIds(all)
+		return hidden.size ? all.filter((r) => !hidden.has(r.id)) : all
+	}).result
 
 function pageOf(shape: TLShape, byId: Map<string, TLRecord>): string | null {
 	let parent: string = shape.parentId
@@ -195,6 +214,21 @@ function obstaclesOn(all: TLRecord[], pageId: string): Rect[] {
 		.filter((r): r is Rect => r !== null)
 }
 
+// Straight lines between the two ends of every bound arrow on the page. New content must stay off them too.
+function segmentsOn(all: TLRecord[], pageId: string): Segment[] {
+	const rects = new Map<string, Rect>()
+	for (const s of all.filter(isShape)) {
+		const r = s.parentId === pageId ? rectOf(s) : null
+		if (r) rects.set(s.id, r)
+	}
+	const ends = new Map<string, { start?: Point; end?: Point }>()
+	for (const b of all.filter(isArrowBinding)) {
+		const r = rects.get(b.toId)
+		if (r) ends.set(b.fromId, { ...ends.get(b.fromId), [b.props.terminal]: { x: r.x + r.w / 2, y: r.y + r.h / 2 } })
+	}
+	return [...ends.values()].flatMap((e) => (e.start && e.end ? [[e.start, e.end] as Segment] : []))
+}
+
 // ---- Reading ---------------------------------------------------------------------------------
 
 function describeOne(s: TLShape, records: TLRecord[], byId: Map<string, TLRecord>, bindings: TLArrowBinding[]) {
@@ -216,6 +250,7 @@ function describeOne(s: TLShape, records: TLRecord[], byId: Map<string, TLRecord
 	if (p.color) out.color = p.color
 	if (m.kind) out.kind = m.kind
 	if (m.kind === 'mark') Object.assign(out, { status: m.status ?? 'open', targetIds: m.targetIds ?? [] })
+	if (m.status === 'pending') out.status = 'pending'
 	if (m.replyTo) out.replyTo = m.replyTo
 	if (s.type === MEDIA_CARD) {
 		out.type = 'media'
@@ -539,7 +574,7 @@ function curveBend(a: Point, b: Point): number {
 
 // The look of every text block the agent writes: a violet, sans-serif, left-aligned box. Together with
 // meta.author = 'agent' this makes agent writing recognisable at a glance and unmistakable in the data.
-function buildAgentBlock(text: string, rect: Rect, c: Common): TLShape {
+function buildAgentBlock(text: string, rect: Rect, c: Common, quote?: string): TLShape {
 	return validated({
 		id: createShapeId(),
 		typeName: 'shape',
@@ -569,9 +604,20 @@ function buildAgentBlock(text: string, rect: Rect, c: Common): TLShape {
 			font: 'sans',
 			align: 'start',
 			verticalAlign: 'start',
-			richText: toRichText(text),
+			richText: quote ? replyRichText(quote, text) : toRichText(text),
 		},
 	} as TLShape)
+}
+
+// First line of every reply: the user's note it answers, so the reply is understood without following an arrow.
+function quoteOf(ann: TLShape): string {
+	const t = textOf(ann).replace(/\s+/g, ' ').trim()
+	return `↩ “${t.length > QUOTE_CHARS ? `${t.slice(0, QUOTE_CHARS)}…` : t}”`
+}
+
+function replyRichText(quote: string, text: string): TLRichText {
+	const quoted = { type: 'paragraph', content: [{ type: 'text', text: quote, marks: [{ type: 'italic' }] }] }
+	return { type: 'doc', content: [quoted, { type: 'paragraph' }, ...(toRichText(text).content as unknown[])] } as TLRichText
 }
 
 interface Anchors {
@@ -627,7 +673,11 @@ export function createShapes(inputs: ShapeInput[], pageIdHint?: string, replace 
 	const pageId = resolvePageId(pageIdHint)
 	return room.storage.transaction((txn) => {
 		const all = Array.from(txn.values())
-		const obstacles = obstaclesOn(all, pageId)
+		// Shapes being recreated are about to be replaced, so they are not in the way of their own replacement.
+		const replaced = replace ? new Set<string>(inputs.flatMap((i) => (i.id ? [normShapeId(i.id)] : []))) : new Set<string>()
+		const rest = all.filter((r) => !replaced.has(r.id))
+		const obstacles = obstaclesOn(rest, pageId)
+		const segments = segmentsOn(rest, pageId)
 		// Rect of every shape on the page by id, so arrows can be checked for crossing shapes.
 		const rects = new Map<string, Rect>()
 		for (const s of all.filter(isShape).filter((s) => s.parentId === pageId)) {
@@ -665,9 +715,7 @@ export function createShapes(inputs: ShapeInput[], pageIdHint?: string, replace 
 		const result: { id: string; x?: number; y?: number; w?: number; h?: number; placed?: boolean }[] = []
 		const warnings: string[] = []
 
-		for (const input of ordered) {
-			index = getIndexAbove(index)
-			const isArrow = input.type === 'arrow'
+		const sizeFor = (input: ShapeInput) => {
 			const text = input.text ?? ''
 			// A diamond only has room for text in its middle, so it needs to be bigger than a box to fit a label.
 			const w = input.w ?? (input.type === 'text' || input.type === 'note' ? 200 : input.type === 'diamond' ? 200 : 160)
@@ -676,6 +724,29 @@ export function createShapes(inputs: ShapeInput[], pageIdHint?: string, replace 
 					? 200
 					: input.h ??
 						Math.max(input.type === 'text' ? 40 : input.type === 'diamond' ? 130 : 100, text ? textBlockHeight(text, w) : 0)
+			return { w, h }
+		}
+
+		// Shapes given explicit x/y are one drawing (a wireframe, a diagram). If it lands on existing shapes or arrows,
+		// the whole drawing slides to the nearest free space as a unit, so its parts keep their layout.
+		let dx = 0
+		let dy = 0
+		const drawn = nonArrows.filter((i) => i.x !== undefined && i.y !== undefined).map((i) => ({ x: i.x!, y: i.y!, ...sizeFor(i) }))
+		if (drawn.length) {
+			const x = Math.min(...drawn.map((r) => r.x))
+			const y = Math.min(...drawn.map((r) => r.y))
+			const box = { x, y, w: Math.max(...drawn.map((r) => r.x + r.w)) - x, h: Math.max(...drawn.map((r) => r.y + r.h)) - y }
+			if (!isFree(obstacles, segments, box)) {
+				const spot = findFreeRect(obstacles, box.w, box.h, { prefer: [box], fallback: box, segments })
+				dx = spot.x - x
+				dy = spot.y - y
+			}
+		}
+
+		for (const input of ordered) {
+			index = getIndexAbove(index)
+			const isArrow = input.type === 'arrow'
+			const { w, h } = sizeFor(input)
 			let placed = false
 			const spec = { ...input }
 			const gap = input.id && connected.has(normShapeId(input.id)) ? DIAGRAM_GAP : GAP
@@ -690,12 +761,14 @@ export function createShapes(inputs: ShapeInput[], pageIdHint?: string, replace 
 						prefer: anchorRect ? sidesOf(anchorRect, w, h, gap) : [],
 						fallback: viewportCorner(pageId),
 						gap,
+						segments,
 					})
 					spec.x = spot.x
 					spec.y = spot.y
 					placed = true
-				} else if (obstacles.some((o) => overlaps({ x: spec.x!, y: spec.y!, w, h }, o))) {
-					warnings.push(`${input.id ?? input.type} at (${spec.x}, ${spec.y}) overlaps an existing shape. Omit x/y to auto-place.`)
+				} else {
+					spec.x += dx
+					spec.y += dy
 				}
 				obstacles.push({ x: spec.x, y: spec.y, w, h })
 			}
@@ -720,7 +793,8 @@ export function createShapes(inputs: ShapeInput[], pageIdHint?: string, replace 
 				warnings.push(...arrowWarnings(input, shape.id, from, to, rects))
 			}
 		}
-		return { pageId, created: result, warnings }
+		const shifted = dx || dy ? { shifted: { dx, dy, note: 'Your x/y landed on existing shapes or arrows, so the whole drawing was moved as one to the nearest free space. The positions in `created` are final.' } } : {}
+		return { pageId, created: result, warnings, ...shifted }
 	}).result
 }
 
@@ -833,6 +907,7 @@ export function addTextBlock(opts: { text: string; near?: string; w?: number; x?
 		const spot = findFreeRect(obstacles, w, h, {
 			prefer: anchorRect ? sidesOf(anchorRect, w, h, DIAGRAM_GAP) : [],
 			fallback: opts.x !== undefined && opts.y !== undefined ? { x: opts.x, y: opts.y } : viewportCorner(pageId),
+			segments: segmentsOn(all, pageId),
 		})
 		const c: Common = {
 			pageId,
@@ -859,6 +934,72 @@ function markRegionAnswered(txn: Txn, ann: TLShape) {
 	if (region && isShape(region)) txn.set(region.id, { ...region, props: { ...region.props, color: 'violet', dash: 'solid' } } as TLShape)
 }
 
+// A mark on a selection points at its dashed box; the reply goes beside that box and points at it too.
+function replyAnchor(txn: Txn, ann: TLShape): TLShape {
+	const regionId = metaOf(ann).regionId
+	const region = regionId ? txn.get(regionId as TLShape['id']) : undefined
+	return region && isShape(region) ? region : ann
+}
+
+// A reply reads best directly under what it answers, so try below before right.
+function replySpot(obstacles: Rect[], segments: Segment[], anchor: TLShape, w: number, h: number): Rect {
+	const [right, under, left, above] = sidesOf(rectOf(anchor)!, w, h, DIAGRAM_GAP) as [Point, Point, Point, Point]
+	return findFreeRect(obstacles, w, h, { prefer: [under, right, left, above], fallback: under, segments })
+}
+
+// ---- Pending replies ---------------------------------------------------------------------
+// While the agent works, every open mark with text shows a dashed "Thinking…" block where the answer will go.
+// It reserves PENDING_H of free space up front; replyToMark later fills the same shape, shrinking it to the text
+// (always safe) or, if the answer is taller than the slot, moving it only when the extra height would overlap.
+
+const PENDING_H = 240
+const QUOTE_CHARS = 40
+
+const pendingFor = (all: TLRecord[], markId: string) =>
+	all.filter(isShape).find((s) => isPending(s) && metaOf(s).replyTo === markId)
+
+// Removes a placeholder together with the link arrow(s) tied to it.
+function dropPending(txn: Txn, ph: TLShape) {
+	for (const id of pendingIds(Array.from(txn.values()), ph)) txn.delete(id)
+}
+
+export function reservePendingReplies() {
+	return room.storage.transaction((txn) => {
+		const all = Array.from(txn.values())
+		const open = all
+			.filter(isShape)
+			.filter((s) => metaOf(s).kind === 'mark' && (metaOf(s).status ?? 'open') !== 'answered' && textOf(s).trim() !== '' && !pendingFor(all, s.id))
+		const obstacles = new Map<string, Rect[]>()
+		const lines = new Map<string, Segment[]>()
+		const tops = new Map<string, IndexKey | undefined>()
+		for (const ann of open) {
+			const pageId = ann.parentId as string
+			if (!obstacles.has(pageId)) {
+				obstacles.set(pageId, obstaclesOn(all, pageId))
+				lines.set(pageId, segmentsOn(all, pageId))
+			}
+			const taken = obstacles.get(pageId)!
+			const anchor = replyAnchor(txn, ann)
+			const spot = replySpot(taken, lines.get(pageId)!, anchor, BLOCK_WIDTH, PENDING_H)
+			taken.push(spot)
+			const index = getIndexAbove(tops.has(pageId) ? tops.get(pageId) : topIndex(all, pageId))
+			const linkIndex = getIndexAbove(index)
+			tops.set(pageId, linkIndex)
+			const base = buildAgentBlock('Thinking…', spot, { pageId, index, meta: { author: 'agent', kind: 'agent-reply', status: 'pending', replyTo: ann.id } }, quoteOf(ann))
+			const block = { ...base, props: { ...base.props, dash: 'dashed', fill: 'semi' } } as TLShape
+			txn.set(block.id, block)
+			addLink(txn, block, anchor, { pageId, index: linkIndex, meta: {} })
+		}
+	}).result
+}
+
+// Placeholders the agent never answered (it did something else, or the run ended) must not linger.
+export function clearPendingReplies() {
+	return room.storage.transaction((txn) => {
+		for (const r of Array.from(txn.values())) if (isShape(r) && isPending(r)) dropPending(txn, r)
+	}).result
+}
+
 // Answering = writing a reply block beside the mark AND flipping its status. Doing both here, in one
 // transaction, is what makes "is it answered?" reliable.
 export function replyToMark(id: string, text: string) {
@@ -866,25 +1007,29 @@ export function replyToMark(id: string, text: string) {
 		const ann = getMark(txn, id)
 		const all = Array.from(txn.values())
 		const pageId = ann.parentId as string
-		const obstacles = obstaclesOn(all, pageId)
 		const w = BLOCK_WIDTH
-		const h = Math.max(60, textBlockHeight(text, w))
-		// A mark on a selection points at its dashed box; the reply goes beside that box and points at it too.
-		const regionId = metaOf(ann).regionId
-		const region = regionId ? txn.get(regionId as TLShape['id']) : undefined
-		const anchor = region && isShape(region) ? region : ann
-		const annRect = rectOf(anchor)!
-		// A reply reads best directly under what it answers, so try below before right.
-		const [right, under, left, above] = sidesOf(annRect, w, h, DIAGRAM_GAP) as [Point, Point, Point, Point]
-		const spot = findFreeRect(obstacles, w, h, { prefer: [under, right, left, above], fallback: under })
-		const index = getIndexAbove(topIndex(all, pageId))
-		const block = buildAgentBlock(text, spot, {
-			pageId,
-			index,
-			meta: { author: 'agent', kind: 'agent-reply', replyTo: ann.id },
-		})
-		txn.set(block.id, block)
-		addLink(txn, block, anchor, { pageId, index: getIndexAbove(index), meta: {} })
+		const quote = quoteOf(ann)
+		const h = Math.max(60, textBlockHeight(`${quote}\n\n${text}`, w))
+		const pending = pendingFor(all, ann.id)
+		let block: TLShape
+		let spot: Rect
+		if (pending) {
+			// Fill the placeholder in place; the link arrow is already bound to it.
+			const rest = all.filter((r) => r.id !== pending.id)
+			const origin = { x: pending.x, y: pending.y }
+			spot = findFreeRect(obstaclesOn(rest, pageId), w, h, { prefer: [origin], fallback: origin, segments: segmentsOn(rest, pageId) })
+			const meta = { ...pending.meta }
+			delete meta.status
+			block = { ...pending, x: spot.x, y: spot.y, meta, props: { ...pending.props, w, h, dash: 'solid', fill: 'solid', richText: replyRichText(quote, text) } } as TLShape
+			txn.set(block.id, block)
+		} else {
+			const anchor = replyAnchor(txn, ann)
+			spot = replySpot(obstaclesOn(all, pageId), segmentsOn(all, pageId), anchor, w, h)
+			const index = getIndexAbove(topIndex(all, pageId))
+			block = buildAgentBlock(text, spot, { pageId, index, meta: { author: 'agent', kind: 'agent-reply', replyTo: ann.id } }, quote)
+			txn.set(block.id, block)
+			addLink(txn, block, anchor, { pageId, index: getIndexAbove(index), meta: {} })
+		}
 		txn.set(ann.id, { ...ann, opacity: 0.55, meta: { ...ann.meta, status: 'answered', answeredBy: block.id } })
 		markRegionAnswered(txn, ann)
 		return { replyId: block.id as string, x: Math.round(spot.x), y: Math.round(spot.y) }
@@ -895,6 +1040,8 @@ export function replyToMark(id: string, text: string) {
 export function resolveMark(id: string) {
 	return room.storage.transaction((txn) => {
 		const ann = getMark(txn, id)
+		const pending = pendingFor(Array.from(txn.values()), ann.id)
+		if (pending) dropPending(txn, pending)
 		txn.set(ann.id, { ...ann, opacity: 0.55, meta: { ...ann.meta, status: 'answered' } })
 		markRegionAnswered(txn, ann)
 		return ann.id as string
@@ -999,6 +1146,7 @@ export function addMedia(opts: AddMediaOptions): AddedMedia {
 		const spot = findFreeRect(obstacles, w, h + CAPTION_H, {
 			prefer: anchor ? sidesOf(rectOf(anchor)!, w, h + CAPTION_H) : [],
 			fallback: opts.x !== undefined && opts.y !== undefined ? { x: opts.x, y: opts.y } : viewportCorner(pageId),
+			segments: segmentsOn(all, pageId),
 		})
 
 		const src = `/uploads/${encodeURIComponent(fileId)}`

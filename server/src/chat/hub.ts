@@ -7,10 +7,20 @@ import { z } from 'zod'
 import { DATA_DIR, OMP_BIN, PORT } from '../config.ts'
 import { deleteChat, findChat, listChats, SESSIONS, touchChat } from './chats.ts'
 import { userMcpServerNames } from './mcpGuard.ts'
+import { clearPendingReplies, reservePendingReplies } from '../shapes.ts'
 import { OmpRpc, type Frame } from './rpc.ts'
 import { attachmentNote, clip, errorText, saveChatImage, toWire, type WireMessage } from './wire.ts'
 
 const run = promisify(execFile)
+
+// A canvas hiccup must never take the chat down with it.
+function canvasSafely(fn: () => unknown) {
+	try {
+		fn()
+	} catch (e) {
+		console.error('canvas pending replies:', errorText(e))
+	}
+}
 
 // omp keys sessions by cwd and loads context files from it, so it gets its own workspace instead of the user's project.
 const WORKSPACE = join(DATA_DIR, 'workspace')
@@ -90,6 +100,7 @@ export class ChatHub {
 	#starting: Promise<OmpRpc> | undefined
 	#clients = new Set<WebSocket>()
 	#running = false
+	#startedAt = 0
 	#current: { id: string; file: string } | undefined
 	#stateTimer: NodeJS.Timeout | undefined
 	#gen = 0 // omp message ids restart at msg-1 in every process; the generation keeps them unique for the browser
@@ -148,12 +159,15 @@ export class ChatHub {
 	#onFrame(gen: number, f: Frame) {
 		switch (f.type) {
 			case 'agent_start':
+				canvasSafely(reservePendingReplies)
+				this.#startedAt = Date.now()
 				this.#running = true
 				this.#broadcast({ t: 'running', running: true })
 				break
 			case 'agent_end':
+				canvasSafely(clearPendingReplies)
 				this.#running = false
-				this.#broadcast({ t: 'running', running: false })
+				this.#broadcast({ t: 'running', running: false, ms: Date.now() - this.#startedAt })
 				this.#pushState(true)
 				break
 			case 'message_start':

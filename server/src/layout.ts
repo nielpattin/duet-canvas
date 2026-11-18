@@ -95,6 +95,16 @@ export function segmentHitsRect(a: Point, b: Point, r: Rect): boolean {
 	return true
 }
 
+// A line the layout must keep clear: the straight run of an arrow between two shapes.
+export type Segment = [Point, Point]
+
+// Free = clear of every shape (plus `gap`) and of every arrow line (also within `gap`, so curved arrows stay clear).
+export function isFree(obstacles: Rect[], segments: Segment[], r: Rect, gap = GAP): boolean {
+	if (obstacles.some((o) => overlaps(r, o, gap))) return false
+	const padded = { x: r.x - gap, y: r.y - gap, w: r.w + 2 * gap, h: r.h + 2 * gap }
+	return !segments.some(([a, b]) => segmentHitsRect(a, b, padded))
+}
+
 export interface Placement {
 	/** Tried first, in order. The first one that is free wins. */
 	prefer: Point[]
@@ -102,13 +112,16 @@ export interface Placement {
 	fallback: Point
 	/** Clear space to keep around other shapes. Defaults to GAP. */
 	gap?: number
+	/** Arrow lines to keep clear as well. */
+	segments?: Segment[]
 }
 
 // Finds a free w x h rectangle. Never returns a spot that overlaps an obstacle (plus GAP), so agent-made
 // blocks cannot land on top of anything already on the canvas.
 export function findFreeRect(obstacles: Rect[], w: number, h: number, where: Placement): Rect {
 	const gap = where.gap ?? GAP
-	const free = (x: number, y: number) => !obstacles.some((o) => overlaps({ x, y, w, h }, o, gap))
+	const segments = where.segments ?? []
+	const free = (x: number, y: number) => isFree(obstacles, segments, { x, y, w, h }, gap)
 	for (const p of where.prefer) if (free(p.x, p.y)) return { ...p, w, h }
 	const origin = where.prefer[0] ?? where.fallback
 
