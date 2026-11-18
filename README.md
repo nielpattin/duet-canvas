@@ -7,9 +7,9 @@ Any MCP client (Claude Code, omp, ...) can connect to it. The web app also has a
 
 Status: early (0.1). Expect rough edges. It is a local, single-user tool.
 
-![The canvas with the Agent chat panel open: a diagram, a pink mark answered by the agent, and a note the agent drew](docs/screenshot.png)
+<p align="center"><img src="docs/screenshot.png" alt="The canvas with the Agent chat panel open: a diagram, a pink mark answered by the agent, and a note the agent drew"></p>
 
-![The browser and the agent both connect to one server: an edit from either is stored in SQLite and synced to the other. The browser also posts its selection and viewport to /api/context.](docs/architecture.svg)
+<p align="center"><img src="docs/architecture.svg" width="560" alt="The browser and the agent both connect to one server: an edit from either is stored in SQLite and synced to the other. The browser also posts its selection and viewport to /api/context."></p>
 
 ## Requirements
 
@@ -33,7 +33,7 @@ docker compose up --build
 
 The web app has an **Agent chat** panel that drives your own agent CLI. The agent's name at the top left of the panel is a dropdown: pick omp, Claude Code, Codex, opencode or pi (CLIs that are not found are listed greyed out). Each must be on your `PATH`, or set `OMP_BIN`, `CLAUDE_BIN`, `CODEX_BIN`, `OPENCODE_BIN`, `PI_BIN`. The server starts the CLI on first use; the choice, and each agent's last model and effort, are remembered.
 
-![The browser talks to the server over a WebSocket; the server drives the picked agent CLI over stdio (omp and pi over JSONL RPC, claude -p with stream-json, codex app-server over JSON-RPC, opencode over ACP); the agent calls back into the server over MCP.](docs/chat.svg)
+<p align="center"><img src="docs/chat.svg" width="560" alt="The browser talks to the server over a WebSocket; the server drives the picked agent CLI over stdio (omp and pi over JSONL RPC, claude -p with stream-json, codex app-server over JSON-RPC, opencode over ACP); the agent calls back into the server over MCP."></p>
 
 The chat socket is `/chat?token`. Claude Code runs one process per turn; pi speaks the same JSONL RPC as omp.
 

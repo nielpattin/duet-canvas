@@ -5,10 +5,22 @@
     svg { color: #171717; }
     @media (prefers-color-scheme: dark) { svg { color: #ededed; } }
     text { fill: currentColor; font-weight: 400; }
-    .dot { fill: currentColor; stroke: none; opacity: 0; animation-duration: 2s; animation-iteration-count: infinite; animation-timing-function: linear; }
-    .row { fill: currentColor; fill-opacity: .055; stroke: none; opacity: 0; animation-duration: 10s; animation-iteration-count: infinite; animation-timing-function: linear; }
-    .ws { animation-name: ws; } .stdio { animation-name: stdio; } .mcp { animation-name: mcp; }
+    .a { animation-duration: 2s; animation-iteration-count: infinite; animation-timing-function: linear; }
+    .dot { fill: currentColor; stroke: none; opacity: 0; }
+    .c1 { fill-opacity: .5; animation-delay: .05s; }
+    .c2 { fill-opacity: .25; animation-delay: .1s; }
+    .row { fill: currentColor; fill-opacity: .09; stroke: none; opacity: 0; animation-duration: 10s; animation-iteration-count: infinite; animation-timing-function: linear; }
+    .ping { opacity: 0; vector-effect: non-scaling-stroke; transform-box: fill-box; transform-origin: center; }
+    .flash { fill: currentColor; fill-opacity: .08; stroke: none; opacity: 0; }
+    .ws circle { animation-name: ws; } .stdio circle { animation-name: stdio; } .mcp circle { animation-name: mcp; }
+    .p1 { animation-name: p1; } .p2 { animation-name: p2; } .p3 { animation-name: p3; }
+    .s1 { animation-name: s1; } .s2 { animation-name: s2; }
     .r0 { animation-name: r0; } .r1 { animation-name: r1; } .r2 { animation-name: r2; } .r3 { animation-name: r3; } .r4 { animation-name: r4; }
+    @keyframes p1 { 0%, 24.9% { opacity: 0; transform: scale(1); } 25% { opacity: .6; transform: scale(1); } 40%, 100% { opacity: 0; transform: scale(4.5); } }
+    @keyframes p2 { 0%, 49.9% { opacity: 0; transform: scale(1); } 50% { opacity: .6; transform: scale(1); } 65%, 100% { opacity: 0; transform: scale(4.5); } }
+    @keyframes p3 { 0% { opacity: .25; transform: scale(3); } 10%, 94.9% { opacity: 0; transform: scale(4.5); } 95% { opacity: .6; transform: scale(1); } 100% { opacity: .25; transform: scale(3); } }
+    @keyframes s1 { 0%, 24.9% { opacity: 0; } 27% { opacity: 1; } 42%, 100% { opacity: 0; } }
+    @keyframes s2 { 0% { opacity: .7; } 12%, 94.9% { opacity: 0; } 97% { opacity: 1; } 100% { opacity: .7; } }
     @keyframes ws { 0% { transform: translate(120px, 200px); opacity: 1; } 25% { transform: translate(192px, 200px); opacity: 1; } 25.1%, 100% { transform: translate(192px, 200px); opacity: 0; } }
     @keyframes stdio { 0%, 25% { transform: translate(280px, 200px); opacity: 0; } 25.1% { opacity: 1; } 50% { transform: translate(352px, 200px); opacity: 1; } 50.1%, 100% { transform: translate(352px, 200px); opacity: 0; } }
     @keyframes mcp { 0%, 55% { transform: translate(440px, 300px); opacity: 0; } 55.1% { opacity: 1; } 59.8% { transform: translate(440px, 340px); } 85.5% { transform: translate(236px, 340px); } 95% { transform: translate(236px, 244px); opacity: 1; } 95.1%, 100% { transform: translate(236px, 244px); opacity: 0; } }
@@ -17,7 +29,7 @@
     @keyframes r2 { 0%, 48.7% { opacity: 0; } 49%, 57% { opacity: 1; } 57.3%, 100% { opacity: 0; } }
     @keyframes r3 { 0%, 68.7% { opacity: 0; } 69%, 77% { opacity: 1; } 77.3%, 100% { opacity: 0; } }
     @keyframes r4 { 0%, 88.7% { opacity: 0; } 89%, 97% { opacity: 1; } 97.3%, 100% { opacity: 0; } }
-    @media (prefers-reduced-motion: reduce) { .dot, .row { animation: none; } }
+    @media (prefers-reduced-motion: reduce) { .a, .row { animation: none !important; } }
   </style>
 
   <!-- The browser and the server share a centre line (y = 200) with the middle row of the agent column. -->
@@ -33,6 +45,10 @@
   <!-- The way back: every agent calls the server over MCP. One elbow, a head where it arrives. -->
   <path d="M440 300V340H236V244"/>
   <path d="M231.757 248.243L236 244L240.243 248.243"/>
+
+  <!-- The server lights up when a prompt arrives and again when the agent calls back. -->
+  <rect class="flash a s1" x="192" y="156" width="88" height="88"/>
+  <rect class="flash a s2" x="192" y="156" width="88" height="88"/>
 
   <!-- The picked agent, painted once per pick. -->
   <g>
@@ -63,7 +79,10 @@
     <text stroke="none" opacity=".5" x="516" y="284" text-anchor="end" font-size="10">rpc</text>
 
   <!-- A prompt, in causal order: browser to server, server to the picked agent, then the agent's MCP call back. -->
-  <g class="dot ws"><circle r="3"/></g>
-  <g class="dot stdio"><circle r="3"/></g>
-  <g class="dot mcp"><circle r="3"/></g>
+  <circle class="ping a p1" cx="192" cy="200" r="4"/>
+  <circle class="ping a p2" cx="352" cy="200" r="4"/>
+  <circle class="ping a p3" cx="236" cy="244" r="4"/>
+  <g class="ws"><circle class="dot a c0" r="3"/><circle class="dot a c1" r="2.4"/><circle class="dot a c2" r="1.8"/></g>
+  <g class="stdio"><circle class="dot a c0" r="3"/><circle class="dot a c1" r="2.4"/><circle class="dot a c2" r="1.8"/></g>
+  <g class="mcp"><circle class="dot a c0" r="3"/><circle class="dot a c1" r="2.4"/><circle class="dot a c2" r="1.8"/></g>
 </svg>
