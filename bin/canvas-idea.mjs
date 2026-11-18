@@ -13,18 +13,18 @@ const usage = (dir = resolveDataDir()) => `canvas-idea ${pkg.version} — local 
 Usage: canvas-idea [command] [options]
 
 Commands:
-  start     Start the server (default); if it already runs, open the unlock link
+  start     Start the server (default); if it already runs, print the unlock link
   stop      Stop the detached server
   status    Show whether the server answers, the link, data dir and chat state
   url       Print the unlock link
   token     Print the chat token
+  rotate    Replace the chat token; use it when the token or link has leaked
 
 Options:
   -p, --port <n>        Port to listen on (default 5858, env PORT)
       --host <h>        Host to bind (default 127.0.0.1, env HOST)
       --data-dir <dir>  Data directory (default OS data dir, env DATA_DIR)
   -d, --detach          Run in the background (start only)
-      --no-open         Do not open the browser
   -v, --version         Print version
   -h, --help            Show this help
 
@@ -49,7 +49,6 @@ try {
 			host: { type: 'string' },
 			'data-dir': { type: 'string' },
 			detach: { type: 'boolean', short: 'd' },
-			'no-open': { type: 'boolean' },
 			version: { type: 'boolean', short: 'v' },
 			help: { type: 'boolean', short: 'h' },
 		},
@@ -83,7 +82,8 @@ const connectHost = host === '0.0.0.0' || host === '::' ? '127.0.0.1' : host
 const urlHost = connectHost.includes(':') ? `[${connectHost}]` : connectHost
 const baseUrl = `http://${urlHost}:${port}`
 
-const token = async () => (await import('../server/src/chat/auth.ts')).chatToken()
+const auth = () => import('../server/src/chat/auth.ts')
+const token = async () => (await auth()).chatToken()
 const unlockLink = async () => `${baseUrl}/?chat=${await token()}`
 
 const answers = async (url) => {
@@ -104,16 +104,6 @@ const waitForServer = async (ms = 15000) => {
 	return false
 }
 
-const openBrowser = (url) => {
-	const [cmd, args] =
-		process.platform === 'win32'
-			? ['cmd', ['/c', 'start', '""', url]]
-			: process.platform === 'darwin'
-				? ['open', [url]]
-				: ['xdg-open', [url]]
-	spawn(cmd, args, { windowsHide: true, detached: true, stdio: 'ignore' }).unref()
-}
-
 const buildWeb = () => {
 	if (existsSync(join(root, 'web/dist/index.html'))) return
 	console.log('web/dist is missing, building the web app…')
@@ -130,7 +120,6 @@ const start = async () => {
 	if (await answers(`${baseUrl}/`)) {
 		const link = await unlockLink()
 		console.log(`already running at ${link}`)
-		if (!values['no-open']) openBrowser(link)
 		return
 	}
 	if (values.detach) return startDetached()
@@ -138,10 +127,8 @@ const start = async () => {
 	process.chdir(join(root, 'server'))
 	await import('../server/src/index.ts')
 	if (!(await waitForServer())) fail(`server did not answer on ${baseUrl} within 15s`)
-	const link = await unlockLink()
-	console.log(`running at ${link}`)
+	// The server already printed its canvas and chat links above.
 	console.log(`data dir ${dataDir}`)
-	if (!values['no-open']) openBrowser(link)
 }
 
 const startDetached = async () => {
@@ -150,7 +137,7 @@ const startDetached = async () => {
 	const out = openSync(log, 'a')
 	const child = spawn(
 		process.execPath,
-		[import.meta.filename, 'start', '--port', String(port), '--host', host, '--data-dir', dataDir, '--no-open'],
+		[import.meta.filename, 'start', '--port', String(port), '--host', host, '--data-dir', dataDir],
 		{ cwd: root, detached: true, windowsHide: true, stdio: ['ignore', out, out] },
 	)
 	closeSync(out)
@@ -163,7 +150,6 @@ const startDetached = async () => {
 	const link = await unlockLink()
 	console.log(`running at ${link}`)
 	console.log(`pid ${child.pid}  log ${log}`)
-	if (!values['no-open']) openBrowser(link)
 }
 
 const stop = () => {
@@ -235,6 +221,17 @@ const status = async () => {
 	if (up) console.log(`chat     ${await chatState()}`)
 }
 
+// The token file is the only copy and the server reads it on every check, so a running server needs no restart.
+const rotate = async () => {
+	;(await auth()).rotateToken()
+	console.log(`replaced the chat token in ${dataDir}: the old one stops working and open chats disconnect within a second`)
+	console.log(`link     ${await unlockLink()}`)
+	// A server on another data dir keeps its own token: say so rather than leave the leaked one live.
+	if ((await answers(`${baseUrl}/`)) && (await chatState()).startsWith('locked')) {
+		fail(`the server at ${baseUrl} rejects the new token, so the old one still works there: it uses another data dir (pass --data-dir) or was started before this update (restart it)`)
+	}
+}
+
 const command = positionals[0] ?? 'start'
 if (positionals.length > 1) fail(`unexpected argument: ${positionals[1]}`, 2)
 
@@ -253,6 +250,9 @@ switch (command) {
 		break
 	case 'token':
 		console.log(await token())
+		break
+	case 'rotate':
+		await rotate()
 		break
 	default:
 		console.error(`unknown command: ${command}`)

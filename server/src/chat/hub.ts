@@ -5,6 +5,7 @@ import { promisify } from 'node:util'
 import type { WebSocket } from 'ws'
 import { z } from 'zod'
 import { DATA_DIR, OMP_BIN, PORT } from '../config.ts'
+import { onTokenChange } from './auth.ts'
 import { deleteChat, findChat, listChats, SESSIONS, touchChat } from './chats.ts'
 import { userMcpServerNames } from './mcpGuard.ts'
 import { clearPendingReplies, reservePendingReplies } from '../shapes.ts'
@@ -104,6 +105,11 @@ export class ChatHub {
 	#current: { id: string; file: string } | undefined
 	#stateTimer: NodeJS.Timeout | undefined
 	#gen = 0 // omp message ids restart at msg-1 in every process; the generation keeps them unique for the browser
+
+	constructor() {
+		// A rotated token must also cut the sockets that connected with the old one.
+		onTokenChange(() => this.#clients.forEach((ws) => ws.terminate()))
+	}
 
 	add(ws: WebSocket) {
 		this.#clients.add(ws)

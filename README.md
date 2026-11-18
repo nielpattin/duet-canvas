@@ -32,13 +32,15 @@ browser --WS /chat?token--> server --stdio JSONL--> omp --mode rpc --MCP http-->
 
 ```sh
 pnpm add -g .            # once, from this repo: puts `canvas-idea` on your PATH (pnpm 12 has no `link --global`)
-canvas-idea              # start in the foreground and open the browser
+canvas-idea              # start in the foreground and print the unlock link
 canvas-idea start -d     # run in the background (log: <data dir>/canvas-idea.log)
-canvas-idea status | stop | url | token
-canvas-idea start --port 5859 --data-dir D:\canvas --no-open
+canvas-idea status | stop | url | token | rotate
+canvas-idea start --port 5859 --data-dir D:\canvas
 ```
 
 `start` builds `web/dist` if it is missing and prints a link ending in `?chat=<token>`. Open that link once (or paste it, or the bare `canvas-idea token`, into the locked chat panel) and the server gives the browser an HttpOnly cookie. Cookies ignore the port, so one unlock also covers the Vite dev server on the same host (`localhost` and `127.0.0.1` count as different hosts). Without it the chat shows "locked" and `/chat` refuses the socket. The token lives in `<data dir>/chat-token`.
+
+**If the token or its link leaks** (a screenshot, a shared terminal or log), run `canvas-idea rotate`. It writes a new token; the running server reads the file on every check, so the old token stops working at once without a restart: old links, browsers' saved unlock and open chats are cut (the panel shows "locked" until you open the new link, which `canvas-idea url` prints again). Deleting `<data dir>/chat-token` by hand does the same. `start -d` keeps the token out of `canvas-idea.log` (run `canvas-idea url` for the link); entries from older versions are dead after a rotate.
 
 ### What it does
 

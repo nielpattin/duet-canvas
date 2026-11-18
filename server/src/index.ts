@@ -134,7 +134,8 @@ const httpServer = serve({ fetch: app.fetch, port: PORT, hostname: HOST }, (info
 	console.log(`canvas  http://${HOST}:${info.port}`)
 	console.log(`mcp     http://${HOST}:${info.port}/mcp`)
 	// The link that unlocks the agent chat in a browser (it swaps the code for a cookie on first visit).
-	if (chat) console.log(`chat    http://${HOST === '0.0.0.0' ? '127.0.0.1' : HOST}:${info.port}/?chat=${chatToken()}`)
+	// Not when stdout is a file (the detached CLI's log): `canvas-idea url` prints it.
+	if (chat) console.log(`chat    http://${HOST === '0.0.0.0' ? '127.0.0.1' : HOST}:${info.port}/${process.stdout.isTTY ? `?chat=${chatToken()}` : ''}`)
 })
 
 // WebSocket endpoint for the tldraw sync client.
