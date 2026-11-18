@@ -14,10 +14,12 @@ import { chatToken, tokenOk } from './chat/auth.ts'
 import { ChatHub, detectOmp } from './chat/hub.ts'
 import { buildMcpServer } from './mcp.ts'
 import { closeRoom, room } from './room.ts'
-import { migrateLegacyMarks } from './shapes.ts'
+import { migrateAnsweredMarks, migrateArrowsBehind, migrateLegacyMarks } from './shapes.ts'
 import { setUiContext, UiContext } from './uiContext.ts'
 
 migrateLegacyMarks()
+migrateArrowsBehind()
+migrateAnsweredMarks()
 
 const hostAllowed = (hostHeader: string | undefined) =>
 	ALLOWED_HOSTS.has((hostHeader ?? '').replace(/:\d+$/, ''))

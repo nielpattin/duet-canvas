@@ -12,8 +12,9 @@ import {
 	type TLRecord,
 	type TLRichText,
 	type TLShape,
+	b64Vecs,
 } from '@tldraw/tlschema'
-import { getIndexAbove, type IndexKey } from '@tldraw/utils'
+import { getIndexAbove, getIndexBelow, type IndexKey } from '@tldraw/utils'
 import { z } from 'zod'
 import { safeId, UPLOADS } from './config.ts'
 import { CAPTION_H, MEDIA_CARD, schema } from './mediaCard.ts'
@@ -89,6 +90,8 @@ export type ShapePatch = z.infer<typeof ShapePatch>
 //          'agent-note'   an agent text block that is not an answer
 //          'link'         an arrow that only connects a reply to what it answers
 //          'region'       the locked dashed box a mark draws around a selection (mark.meta.regionId)
+//          'reply-label'  the locked "↩ quote" line on top of an agent-reply; a child of the reply, so it moves with it
+//          'answered-badge' the locked green ✓ on the corner of an answered mark; a child of the mark
 // status   marks: 'open' | 'answered'
 //          agent-reply: 'pending' while the agent is still working on it (a dashed "Thinking…" placeholder
 //          that replyToMark later fills in place); no status once it holds the answer
@@ -135,6 +138,7 @@ interface LooseProps {
 	scale?: number
 	geo?: string
 	color?: string
+	fill?: string
 	richText?: TLRichText
 	assetId?: string | null
 	kind?: string
@@ -159,6 +163,7 @@ const isPending = (s: TLShape) => metaOf(s).kind === 'agent-reply' && metaOf(s).
 // A pending placeholder with its link arrow(s) and their bindings (or only `only`'s).
 function pendingIds(all: TLRecord[], only?: TLShape): Set<string> {
 	const ids = new Set<string>(all.filter(isShape).filter((s) => (only ? s.id === only.id : isPending(s))).map((s) => s.id))
+	for (const s of all.filter(isShape)) if (ids.has(s.parentId)) ids.add(s.id) // its quote label
 	for (const r of all) if (isBinding(r) && ids.has(r.toId)) ids.add(r.fromId)
 	for (const r of all) if (isBinding(r) && (ids.has(r.fromId) || ids.has(r.toId))) ids.add(r.id)
 	return ids
@@ -166,11 +171,14 @@ function pendingIds(all: TLRecord[], only?: TLShape): Set<string> {
 
 // Everything the agent reads goes through here. It never sees pending placeholders: shown a "Thinking…" block it
 // deleted it as stale, in parallel with filling it, and lost its own answer. They still count as taken space.
+// Quote labels and answered badges are decoration of their parent, not content.
+const DECORATION: Record<string, true> = { 'reply-label': true, 'answered-badge': true }
+
 const readAll = (): TLRecord[] =>
 	room.storage.transaction((txn) => {
 		const all = Array.from(txn.values())
 		const hidden = pendingIds(all)
-		return hidden.size ? all.filter((r) => !hidden.has(r.id)) : all
+		return all.filter((r) => !hidden.has(r.id) && !(isShape(r) && DECORATION[metaOf(r).kind ?? '']))
 	}).result
 
 function pageOf(shape: TLShape, byId: Map<string, TLRecord>): string | null {
@@ -425,6 +433,16 @@ export function resolvePageId(requested?: string): string {
 	return pages[0].id
 }
 
+// Arrows are drawn behind every block: they get an index below everything else on the page.
+function arrowIndex(all: TLRecord[], pageId: string): IndexKey {
+	const lowest = all
+		.filter(isShape)
+		.filter((s) => s.parentId === pageId)
+		.map((s) => s.index)
+		.sort()[0]
+	return getIndexBelow(lowest)
+}
+
 function topIndex(all: TLRecord[], pageId: string): IndexKey | undefined {
 	return all
 		.filter(isShape)
@@ -604,7 +622,7 @@ function buildAgentBlock(text: string, rect: Rect, c: Common, quote?: string): T
 			font: 'sans',
 			align: 'start',
 			verticalAlign: 'start',
-			richText: quote ? replyRichText(quote, text) : toRichText(text),
+			richText: quote ? replyRichText(text) : toRichText(text),
 		},
 	} as TLShape)
 }
@@ -615,9 +633,38 @@ function quoteOf(ann: TLShape): string {
 	return `↩ “${t.length > QUOTE_CHARS ? `${t.slice(0, QUOTE_CHARS)}…` : t}”`
 }
 
-function replyRichText(quote: string, text: string): TLRichText {
-	const quoted = { type: 'paragraph', content: [{ type: 'text', text: quote, marks: [{ type: 'italic' }] }] }
-	return { type: 'doc', content: [quoted, { type: 'paragraph' }, ...(toRichText(text).content as unknown[])] } as TLRichText
+// The reply's own text starts two lines down: the first line is left empty for the quote label (see addQuoteLabel).
+function replyRichText(text: string): TLRichText {
+	return { type: 'doc', content: [{ type: 'paragraph' }, { type: 'paragraph' }, ...(toRichText(text).content as unknown[])] } as TLRichText
+}
+
+// The quote is a separate locked text shape, parented to the reply: violet instead of black, and it cannot be
+// selected, edited or deleted on its own, yet it moves and is deleted with the reply.
+function addQuoteLabel(txn: Txn, block: TLShape, quote: string) {
+	const label = validated({
+		id: createShapeId(),
+		typeName: 'shape',
+		type: 'text',
+		x: 16, // tldraw's label padding
+		y: 16,
+		rotation: 0,
+		index: 'a1' as IndexKey,
+		parentId: block.id,
+		isLocked: true,
+		opacity: 1,
+		meta: { author: 'agent', kind: 'reply-label' },
+		props: {
+			color: 'violet',
+			size: 's',
+			font: 'sans',
+			textAlign: 'start',
+			w: propsOf(block).w! - 32,
+			richText: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: quote, marks: [{ type: 'italic' }] }] }] },
+			scale: 1,
+			autoSize: false,
+		},
+	} as unknown as TLShape)
+	txn.set(label.id, label)
 }
 
 interface Anchors {
@@ -659,7 +706,7 @@ function addLink(txn: Txn, from: TLShape, to: TLShape, c: Common): TLShape {
 	const arrow = validated(
 		buildShape(
 			{ type: 'arrow', from: from.id, to: to.id, color: 'grey', route: 'curve' },
-			{ ...c, meta: { author: 'agent', kind: 'link' } },
+			{ ...c, index: arrowIndex(Array.from(txn.values()), c.pageId), meta: { author: 'agent', kind: 'link' } },
 			{ w: 0, h: 0 },
 			(id) => (id === from.id ? from : id === to.id ? to : undefined)
 		)
@@ -687,6 +734,7 @@ export function createShapes(inputs: ShapeInput[], pageIdHint?: string, replace 
 		// Shapes that arrows attach to need extra room around them so the arrows are visible.
 		const connected = new Set(inputs.flatMap((i) => [i.from, i.to]).filter((id): id is string => !!id).map(normShapeId))
 		let index = topIndex(all, pageId)
+		let lowArrow = arrowIndex(all, pageId)
 		const created = new Map<string, TLShape>()
 		const lookup = (id: string) => created.get(id) ?? (txn.get(id) as TLShape | undefined)
 
@@ -744,8 +792,8 @@ export function createShapes(inputs: ShapeInput[], pageIdHint?: string, replace 
 		}
 
 		for (const input of ordered) {
-			index = getIndexAbove(index)
 			const isArrow = input.type === 'arrow'
+			const at = isArrow ? (lowArrow = getIndexBelow(lowArrow)) : (index = getIndexAbove(index))
 			const { w, h } = sizeFor(input)
 			let placed = false
 			const spec = { ...input }
@@ -773,7 +821,7 @@ export function createShapes(inputs: ShapeInput[], pageIdHint?: string, replace 
 				obstacles.push({ x: spec.x, y: spec.y, w, h })
 			}
 
-			const shape = validated(buildShape(spec, { pageId, index, meta: { author: 'agent' } }, { w, h }, lookup))
+			const shape = validated(buildShape(spec, { pageId, index: at, meta: { author: 'agent' } }, { w, h }, lookup))
 			if (txn.get(shape.id)) {
 				if (!replace) {
 					throw new Error(`Shape id ${shape.id} already exists. Use update_shapes to change it, or pass replace: true to recreate it.`)
@@ -916,7 +964,7 @@ export function addTextBlock(opts: { text: string; near?: string; w?: number; x?
 		}
 		const block = buildAgentBlock(opts.text, spot, c)
 		txn.set(block.id, block)
-		if (anchor) addLink(txn, block, anchor, { ...c, index: getIndexAbove(c.index) })
+		if (anchor) addLink(txn, block, anchor, c)
 		return { id: block.id as string, x: Math.round(spot.x), y: Math.round(spot.y), w, h }
 	}).result
 }
@@ -925,6 +973,82 @@ function getMark(txn: Txn, id: string): TLShape {
 	const ann = txn.get(normShapeId(id))
 	if (!ann || !isShape(ann) || metaOf(ann).kind !== 'mark') throw new Error(`${id} is not a mark`)
 	return ann
+}
+
+const BADGE_SIZE = 40
+
+// The ✓ is drawn as a stroke, not typed as a glyph: a glyph's position inside the disc depends on the font the
+// browser falls back to, a stroke is centred by construction. Corner points of the tick inside the 40px disc.
+const TICK: [number, number][] = [[11, 21], [17, 28], [29, 13]]
+function tickPoints(): { x: number; y: number; z: number }[] {
+	const pts: { x: number; y: number; z: number }[] = []
+	TICK.slice(1).forEach(([x1, y1], i) => {
+		const [x0, y0] = TICK[i]!
+		for (let k = 0; k < 5; k++) pts.push({ x: x0 + ((x1 - x0) * k) / 5, y: y0 + ((y1 - y0) * k) / 5, z: 0.5 })
+	})
+	const [lx, ly] = TICK.at(-1)!
+	pts.push({ x: lx, y: ly, z: 0.5 })
+	return pts
+}
+
+// The badge: a hand-drawn green disc (child of the mark) with a drawn tick (child of the disc). Both are locked.
+function addBadge(txn: Txn, ann: TLShape) {
+	const meta = { author: 'agent', kind: 'answered-badge' }
+	const disc = validated({
+		...buildShape({ type: 'ellipse', color: 'green', fill: 'solid', x: 200 - BADGE_SIZE / 2 - 2, y: -BADGE_SIZE / 2 + 2 }, { pageId: ann.id, index: 'a1' as IndexKey, meta }, { w: BADGE_SIZE, h: BADGE_SIZE }, () => undefined),
+		isLocked: true,
+	} as TLShape)
+	const tick = validated({
+		id: createShapeId(),
+		typeName: 'shape',
+		type: 'draw',
+		x: 0,
+		y: 0,
+		rotation: 0,
+		index: 'a1' as IndexKey,
+		parentId: disc.id,
+		isLocked: true,
+		opacity: 1,
+		meta,
+		props: {
+			color: 'green',
+			fill: 'none',
+			dash: 'draw',
+			size: 'm',
+			segments: [{ type: 'free', path: b64Vecs.encodePoints(tickPoints()) }],
+			isComplete: true,
+			isClosed: false,
+			isPen: false,
+			scale: 1,
+			scaleX: 1,
+			scaleY: 1,
+		},
+	} as unknown as TLShape)
+	txn.set(disc.id, disc)
+	txn.set(tick.id, tick)
+}
+
+// An answered mark turns solid grey and gets a locked green ✓ on its corner. The badge is a child of the mark, so it
+// moves and is deleted with it. (The web app reverses all of this if the user edits the mark again.)
+function markAnswered(txn: Txn, ann: TLShape, meta: Partial<BlockMeta>) {
+	txn.set(ann.id, { ...ann, opacity: 1, props: { ...ann.props, color: 'grey' }, meta: { ...ann.meta, status: 'answered', ...meta } } as TLShape)
+	const hasBadge = Array.from(txn.values()).some((r) => isShape(r) && r.parentId === ann.id && metaOf(r).kind === 'answered-badge')
+	if (!hasBadge) addBadge(txn, ann)
+}
+
+// Boards made before answered marks turned grey (same note at 55% opacity), or whose badge still types its ✓ as text.
+export function migrateAnsweredMarks() {
+	room.storage.transaction((txn) => {
+		for (const r of Array.from(txn.values())) {
+			if (!isShape(r)) continue
+			if (metaOf(r).kind === 'mark' && metaOf(r).status === 'answered' && r.opacity !== 1) markAnswered(txn, r, {})
+			if (metaOf(r).kind === 'answered-badge' && r.type === 'geo' && textOf(r) !== '') {
+				txn.delete(r.id)
+				const parent = txn.get(r.parentId as TLShape['id'])
+				if (parent && isShape(parent)) addBadge(txn, parent)
+			}
+		}
+	})
 }
 
 // The box around a marked selection turns violet (the agent's colour) and solid once the mark is answered.
@@ -964,7 +1088,7 @@ function replySpot(obstacles: Rect[], segments: Segment[], anchor: TLShape, w: n
 // (always safe) or, if the answer is taller than the slot, moving it only when the extra height would overlap.
 
 const PENDING_H = 240
-const QUOTE_CHARS = 40
+const QUOTE_CHARS = 30 // short enough that the quote label stays on one line of a reply
 
 const pendingFor = (all: TLRecord[], markId: string) =>
 	all.filter(isShape).find((s) => isPending(s) && metaOf(s).replyTo === markId)
@@ -994,12 +1118,12 @@ export function reservePendingReplies() {
 			const spot = replySpot(taken, lines.get(pageId)!, anchor, BLOCK_WIDTH, PENDING_H)
 			taken.push(spot)
 			const index = getIndexAbove(tops.has(pageId) ? tops.get(pageId) : topIndex(all, pageId))
-			const linkIndex = getIndexAbove(index)
-			tops.set(pageId, linkIndex)
+			tops.set(pageId, index)
 			const base = buildAgentBlock('Thinking…', spot, { pageId, index, meta: { author: 'agent', kind: 'agent-reply', status: 'pending', replyTo: ann.id } }, quoteOf(ann))
 			const block = { ...base, props: { ...base.props, dash: 'dashed', fill: 'semi' } } as TLShape
 			txn.set(block.id, block)
-			addLink(txn, block, anchor, { pageId, index: linkIndex, meta: {} })
+			addQuoteLabel(txn, block, quoteOf(ann))
+			addLink(txn, block, anchor, { pageId, index, meta: {} })
 		}
 	}).result
 }
@@ -1034,7 +1158,7 @@ export function replyToMark(id: string, text: string) {
 			spot = isFree(taken, lines, here) ? here : replySpot(taken, lines, replyAnchor(txn, ann), w, h)
 			const meta = { ...pending.meta }
 			delete meta.status
-			block = { ...pending, x: spot.x, y: spot.y, meta, props: { ...pending.props, w, h, dash: 'solid', fill: 'solid', richText: replyRichText(quote, text) } } as TLShape
+			block = { ...pending, x: spot.x, y: spot.y, meta, props: { ...pending.props, w, h, dash: 'solid', fill: 'solid', richText: replyRichText(text) } } as TLShape
 			txn.set(block.id, block)
 		} else {
 			const anchor = replyAnchor(txn, ann)
@@ -1042,9 +1166,10 @@ export function replyToMark(id: string, text: string) {
 			const index = getIndexAbove(topIndex(all, pageId))
 			block = buildAgentBlock(text, spot, { pageId, index, meta: { author: 'agent', kind: 'agent-reply', replyTo: ann.id } }, quote)
 			txn.set(block.id, block)
-			addLink(txn, block, anchor, { pageId, index: getIndexAbove(index), meta: {} })
+			addQuoteLabel(txn, block, quote)
+			addLink(txn, block, anchor, { pageId, index, meta: {} })
 		}
-		txn.set(ann.id, { ...ann, opacity: 0.55, meta: { ...ann.meta, status: 'answered', answeredBy: block.id } })
+		markAnswered(txn, ann, { answeredBy: block.id })
 		markRegionAnswered(txn, ann)
 		return { replyId: block.id as string, x: Math.round(spot.x), y: Math.round(spot.y) }
 	}).result
@@ -1056,7 +1181,7 @@ export function resolveMark(id: string) {
 		const ann = getMark(txn, id)
 		const pending = pendingFor(Array.from(txn.values()), ann.id)
 		if (pending) dropPending(txn, pending)
-		txn.set(ann.id, { ...ann, opacity: 0.55, meta: { ...ann.meta, status: 'answered' } })
+		markAnswered(txn, ann, {})
 		markRegionAnswered(txn, ann)
 		return ann.id as string
 	}).result
@@ -1213,6 +1338,23 @@ export function changesSince(sinceClock: number): CanvasChanges {
 		.map((s) => describeOne(s, records, byId, bindings))
 	const deleted = result.diff.deletes.filter((id) => id.startsWith('shape:'))
 	return { clock, reloadAll: result.wipeAll, changed, deleted }
+}
+
+// Boards made before arrows went behind blocks: move every arrow that sits above a block to below all of them.
+export function migrateArrowsBehind() {
+	room.storage.transaction((txn) => {
+		const all = Array.from(txn.values())
+		for (const page of all.filter(isPage)) {
+			const onPage = all.filter(isShape).filter((s) => s.parentId === page.id)
+			const lowestBlock = onPage.filter((s) => s.type !== 'arrow').map((s) => s.index).sort()[0]
+			if (!lowestBlock) continue
+			let low = arrowIndex(all, page.id)
+			for (const a of onPage.filter((s) => s.type === 'arrow' && s.index > lowestBlock).sort((x, y) => (x.index < y.index ? -1 : 1))) {
+				txn.set(a.id, { ...a, index: low })
+				low = getIndexBelow(low)
+			}
+		}
+	})
 }
 
 // Marks were called annotations before; rewrite stored shapes so existing boards keep working.

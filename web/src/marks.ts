@@ -192,23 +192,43 @@ export function keepMarksTidy(editor: Editor) {
 		}
 		if (shape.type !== 'arrow') sweepLinks()
 	})
+	// Arrows are drawn behind blocks. tldraw lifts a bound arrow above the shapes it joins; undo that, and
+	// send every arrow the user draws to the back.
+	const offArrowLift = editor.sideEffects.registerBeforeChangeHandler('shape', (prev, next, source) =>
+		source === 'user' && next.type === 'arrow' && next.index > prev.index ? { ...next, index: prev.index } : next
+	)
+	const offArrowBack = editor.sideEffects.registerAfterCreateHandler('shape', (shape, source) => {
+		if (source === 'user' && shape.type === 'arrow') editor.sendToBack([shape.id])
+	})
 	return () => {
 		offChange()
 		offGuard()
 		offDelete()
+		offArrowLift()
+		offArrowBack()
 	}
 }
 
 // If the user edits an answered mark, it is a new message: reopen it so the agent sees it again.
 export function reopenEditedMarks(editor: Editor) {
-	return editor.sideEffects.registerBeforeChangeHandler('shape', (prev, next) => {
+	const offReopen = editor.sideEffects.registerBeforeChangeHandler('shape', (prev, next) => {
 		const m = metaOf(next)
 		if (m.kind !== 'mark' || m.status !== 'answered') return next
 		const before = markText(prev)
 		const after = markText(next)
 		if (before === after) return next
-		return { ...next, opacity: 1, meta: { ...next.meta, status: 'open' } }
+		return { ...next, opacity: 1, props: { ...next.props, color: 'light-red' }, meta: { ...next.meta, status: 'open' } } as typeof next
 	})
+	// The answered ✓ is a locked child, so removing it has to ignore the lock.
+	const offBadge = editor.sideEffects.registerAfterChangeHandler('shape', (prev, next) => {
+		if (!isMark(next) || metaOf(prev).status !== 'answered' || metaOf(next).status === 'answered') return
+		const badges = editor.getSortedChildIdsForParent(next.id).filter((id) => metaOf(editor.getShape(id)!).kind === 'answered-badge')
+		if (badges.length > 0) editor.run(() => editor.deleteShapes(badges), { ignoreShapeLock: true })
+	})
+	return () => {
+		offReopen()
+		offBadge()
+	}
 }
 
 /** The shape's rich text as a stable string ('' when it has none). */
@@ -228,4 +248,4 @@ export const repliesToMark = (editor: Editor, mark: TLShape) =>
 export const countOpenMarks = (editor: Editor) => openMarksWithText(editor).length
 
 // Shapes a person would count as "items": everything except arrows (links and connectors).
-export const countItems = (editor: Editor) => editor.getCurrentPageShapes().filter((s) => s.type !== 'arrow' && !isRegion(s)).length
+export const countItems = (editor: Editor) => editor.getCurrentPageShapes().filter((s) => s.type !== 'arrow' && !isRegion(s) && !['reply-label', 'answered-badge'].includes(metaOf(s).kind ?? '')).length
