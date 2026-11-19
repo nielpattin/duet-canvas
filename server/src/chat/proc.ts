@@ -1,6 +1,7 @@
 import { execFile, spawn, type ChildProcessByStdio } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { delimiter, join } from 'node:path'
+import { stripVTControlCharacters } from 'node:util'
 import type { Readable, Writable } from 'node:stream'
 import type { Detected } from './driver.ts'
 
@@ -48,7 +49,8 @@ export function detectCli(name: string, bin: string, envVar: string): Promise<De
 	child.on('error', (e) => (clearTimeout(timer), fail(e.message)))
 	child.on('close', (code) => {
 		clearTimeout(timer)
-		const version = out.trim().split(/\r?\n/).pop() ?? ''
+		// opencode colors its --version output even when piped.
+		const version = stripVTControlCharacters(out).trim().split(/\r?\n/).pop() ?? ''
 		if (code === 0 && version) resolve({ ok: true, version })
 		else fail(`exit code ${code}`)
 	})
