@@ -8,7 +8,8 @@
 // CLIs through the same WebSocket the browser uses, and then reads the canvas back to check what was drawn.
 // The test models are cheap on purpose; they spend a little of your plans/credits.
 import { randomBytes } from 'node:crypto'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { spawn } from 'node:child_process'
+import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
@@ -54,13 +55,11 @@ const S = await import('../src/shapes.ts')
 const { room } = await import('../src/room.ts')
 // The server's own shutdown ends with process.exit(0), so the verdict and the cleanup are set on exit.
 process.on('exit', () => {
-	// Windows keeps a folder locked while an agent process that ran in it is still shutting down; a leftover temp dir is harmless.
+	// Agents that stop when their stdin closes (codex, opencode) only see it once this process is gone, and Windows will
+	// not delete a folder a running process still uses. So a detached process deletes it, retrying until they have exited.
 	if (!opt.keep) {
-		try {
-			rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
-		} catch {
-			console.log(`(could not delete ${dir})`)
-		}
+		const rm = `require('node:fs').rmSync(${JSON.stringify(dir)}, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 })`
+		spawn(process.execPath, ['-e', rm], { detached: true, stdio: 'ignore', windowsHide: true }).unref()
 	}
 	process.exitCode = failed ? 1 : 0
 })
