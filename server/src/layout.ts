@@ -134,8 +134,8 @@ export function freeRectNear(obstacles: Rect[], segments: Segment[], w: number, 
 export interface Placement {
 	/** Tried first, in order. The first one that is free wins. */
 	prefer: Point[]
-	/** When none of `prefer` is free, search outward from here for the nearest free spot. */
-	fallback: Point
+	/** Where the search starts when `prefer` is empty; otherwise the search starts at `prefer[0]`. */
+	origin: Point
 	/** Clear space to keep around other shapes. Defaults to GAP. */
 	gap?: number
 	/** Arrow lines to keep clear as well. */
@@ -149,7 +149,7 @@ export function findFreeRect(obstacles: Rect[], w: number, h: number, where: Pla
 	const segments = where.segments ?? []
 	const free = (x: number, y: number) => isFree(obstacles, segments, { x, y, w, h }, gap)
 	for (const p of where.prefer) if (free(p.x, p.y)) return { ...p, w, h }
-	const origin = where.prefer[0] ?? where.fallback
+	const origin = where.prefer[0] ?? where.origin
 
 	if (where.prefer.length === 0) {
 		// No anchor: fill the canvas like text, left to right then top to bottom from the origin, so new

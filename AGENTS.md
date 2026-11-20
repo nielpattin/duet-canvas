@@ -1,11 +1,10 @@
 # Agent instructions
 
-## After every change: rebuild
+## After every change
 
-The server serves the built `web/dist`, and `duet-canvas start` only builds it when it is missing. After changing anything under `web/`, rebuild it:
+Run `pnpm -r typecheck`. After changing anything under `web/`, also rebuild it: the server serves the built `web/dist`, and `cduet start` only builds it when it is missing.
 
 ```sh
-pnpm -r typecheck
 pnpm --filter web build
 ```
 

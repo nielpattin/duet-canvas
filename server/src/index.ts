@@ -15,12 +15,7 @@ import { detectAgents } from './chat/agents.ts'
 import { ChatHub } from './chat/hub.ts'
 import { buildMcpServer } from './mcp.ts'
 import { closeRoom, room } from './room.ts'
-import { migrateAnsweredMarks, migrateArrowsBehind, migrateLegacyMarks } from './shapes.ts'
 import { setUiContext, UiContext } from './uiContext.ts'
-
-migrateLegacyMarks()
-migrateArrowsBehind()
-migrateAnsweredMarks()
 
 const hostAllowed = (hostHeader: string | undefined) =>
 	ALLOWED_HOSTS.has((hostHeader ?? '').replace(/:\d+$/, ''))
@@ -128,7 +123,7 @@ const httpServer = serve({ fetch: app.fetch, port: PORT, hostname: HOST }, (info
 	console.log(`canvas  http://${HOST}:${info.port}`)
 	console.log(`mcp     http://${HOST}:${info.port}/mcp`)
 	// The link that unlocks the agent chat in a browser (it swaps the code for a cookie on first visit).
-	// Not when stdout is a file (the detached CLI's log): `duet-canvas url` prints it.
+	// Not when stdout is a file (the detached CLI's log): `cduet url` prints it.
 	if (chat) console.log(`chat    http://${HOST === '0.0.0.0' ? '127.0.0.1' : HOST}:${info.port}/${process.stdout.isTTY ? `?chat=${chatToken()}` : ''}`)
 })
 

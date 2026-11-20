@@ -76,7 +76,7 @@ function Unlock() {
 			}}
 		>
 			<p>
-				Unlock the agent chat in this browser: run <code>duet-canvas start</code>, or paste the <code>chat</code> link it printed.
+				Unlock the agent chat in this browser: run <code>cduet start</code>, or paste the <code>chat</code> link it printed.
 			</p>
 			<input
 				aria-label="Unlock link or code"

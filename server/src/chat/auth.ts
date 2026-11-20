@@ -7,7 +7,7 @@ import { DATA_DIR } from '../config.ts'
 // computer. So the chat needs a secret that only the launching user holds: a random token kept in the data dir
 // (owner-only where the OS supports it) and handed to the browser once, in the link the CLI prints.
 // It is persisted so bookmarked tabs and restarts keep working.
-// The file is the only copy and is read on every check, never cached: `duet-canvas rotate` runs in another process, and
+// The file is the only copy and is read on every check, never cached: `cduet rotate` runs in another process, and
 // a leaked token must stop working on a running server without a restart.
 const FILE = join(DATA_DIR, 'chat-token')
 

@@ -3,7 +3,7 @@ import { CheckIcon, CloseIcon, DashIcon } from '../icons.tsx'
 import { Md } from './Markdown.tsx'
 import type { WireMessage } from './store.ts'
 
-const toolLabel = (name: string) => name.replace(/^mcp__(?:canvas|duet-canvas)_/, '').replaceAll('_', ' ')
+const toolLabel = (name: string) => name.replace(/^mcp__duet_canvas_/, '').replaceAll('_', ' ')
 
 // `tools` is one "id:state" line per tool call of this message. Passing it as a string (not a Map) keeps the
 // props comparable, so memo skips every message except the one that is streaming.

@@ -33,7 +33,7 @@ function prepareWorkspace() {
 	mkdirSync(SESSIONS, { recursive: true })
 	const servers: Record<string, unknown> = {}
 	for (const name of userMcpServerNames()) servers[name] = { type: 'http', url: 'http://127.0.0.1:9/disabled', enabled: false }
-	servers['duet-canvas'] = { type: 'http', url: CANVAS_MCP_URL, enabled: true }
+	servers.duet_canvas = { type: 'http', url: CANVAS_MCP_URL, enabled: true }
 	writeFileSync(join(WORKSPACE, '.omp', 'mcp.json'), JSON.stringify({ mcpServers: servers }))
 	writeFileSync(CONFIG, 'tools:\n  xdev: false\n')
 }
@@ -60,8 +60,8 @@ export class OmpDriver implements ChatDriver {
 			this.#ev.closed(reason)
 		})
 		// First thing in the pipe: protocol v2 sends oversized frames (tool results with images) as rpc_chunk sequences
-		// instead of cutting them. An omp without v2 answers with an error and we stay on v1.
-		this.#rpc.request('negotiate_protocol', { protocolVersion: 2 }).catch(() => {})
+		// instead of cutting them.
+		await this.#rpc.request('negotiate_protocol', { protocolVersion: 2 })
 		await this.#rpc.request('set_event_filter', { events: EVENTS, messageUpdates: 'full' })
 		await this.#applyPrefs()
 	}
@@ -132,13 +132,13 @@ export class OmpDriver implements ChatDriver {
 			queue: { steering: s.queuedMessages?.steering ?? [], followUp: s.queuedMessages?.followUp ?? [] },
 			usage: { cost: stats.cost ?? 0, tokens: stats.tokens ?? {}, context: stats.contextUsage ?? null },
 			// Anything beyond the canvas tools means a server from the user's own omp config got through mcpGuard.
-			extraTools: ((s.dumpTools ?? []) as { name: string }[]).map((t) => t.name).filter((n) => !n.startsWith('mcp__duet-canvas_')),
+			extraTools: ((s.dumpTools ?? []) as { name: string }[]).map((t) => t.name).filter((n) => !n.startsWith('mcp__duet_canvas_')),
 			current: s.sessionId && s.sessionFile ? { id: s.sessionId, file: s.sessionFile } : undefined,
 		}
 	}
 
 	// Long sessions: walk the history in small pages (a single reply with many screenshots would blow the frame limit).
-	// Busy or stale pages fall back to the one-shot snapshot.
+	// If a page is busy or stale, load the whole history in one request instead.
 	async history(): Promise<WireMessage[]> {
 		const out: WireMessage[] = []
 		const add = (messages: unknown[]) => {

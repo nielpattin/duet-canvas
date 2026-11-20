@@ -33,7 +33,7 @@ Coordinates are page pixels, x grows right, y grows down. Shape ids look like "s
 
 PAGES
 - The canvas has pages. Every shape and mark says its pageId and pageName. get_context tells you which page the
-  user is on (currentPage); new content goes there unless you pass pageId. create_page adds a page. You cannot move the user's view: say which page and where you put things.
+  user is on (currentPage); new content goes there unless you pass pageId. Say which page and where you put things.
 
 WHO WROTE WHAT
 - Everything you create is stamped author "agent". Shapes with author "user" are the user's.
@@ -51,37 +51,23 @@ MARKS (how the user talks to you)
 - A mark on a selection has a dashed pink box around everything selected ("selection": its x, y, w, h in list_marks).
   Answering turns the box violet and points your reply at it. Its x, y, w, h tell you which shapes it covers.
 - A mark aimed at one of your replies, or at a box you already answered, continues a conversation: list_marks adds "thread" (what the user wrote first, what you answered, and the box it was about, oldest first). Read it before answering.
-- list_marks is enough when you only need the marks; get_context also gives selection and viewport (its marks are a short list).
-- When the user says "this", "that" or "here" without a mark, call get_context: it returns their current
-  selection, viewport and open marks. It works with the browser closed too (last known state).
 
 SEEING THE CANVAS
-- get_canvas returns data (types, positions, sizes, text, colors, arrow bindings), not a picture. Work from that: you
-  cannot render the canvas, so do not try to confirm how something looks, and NEVER open a browser to check your work.
-
-MEDIA
-- get_canvas lists image and video shapes but does not show them. Call view_image with an image shape id to actually
-  see it (videos cannot be viewed, only listed).
-- add_media puts a PNG, JPEG, GIF, WebP, MP4 or WebM on the canvas as a media card (picture plus caption in one shape; edit the caption with update_shapes text). Give a local file path, a URL (the server downloads
-  it) or base64. Use path or url for anything big.
+- Work from get_canvas data (positions, sizes, text, colors, bindings); do not claim how something looks, and NEVER
+  open a browser to check your work.
+- A media card is the picture plus its caption in one shape; edit the caption with update_shapes text.
 
 STAYING IN SYNC (the user edits the canvas while you work)
 - Every read is live; the server never serves stale data. But you are not pushed updates between calls.
 - Every tool result ends with canvas.clock (the document version) and canvas.openMarks. Remember the clock from
-  your last call; before you edit or after a long task, call get_changes({sinceClock}) to see exactly what the user
-  added, edited, moved or deleted since, and re-check openMarks for new messages.
+  your last call for get_changes, and re-check openMarks for new messages.
 - Selection and viewport are not part of the document. get_context always returns the current ones.
 
 LAYOUT
-- Arrows: connect shapes with {type:"arrow", from, to}; they bind and follow the shapes when moved. In create_shapes, from/to is the position of a shape in the same "shapes" list (0 = the first), or the id of a shape already on the canvas. The server makes every shape id and returns them in "created".
-  Pick route per arrow: "straight" for tidy flows, "curve" for maps/trees that fan out, "elbow" for loops.
-  Lay diagrams out in a grid so arrows run between neighbours without crossing other shapes, and fix any warning
-  create_shapes returns.
-- Omit x and y when creating shapes, text blocks and images: the server finds a free spot near the anchor (the "near"
-  shape, or what the user is looking at) and never lands on top of existing content or on the arrows between shapes.
-  Shapes you give explicit x/y form one drawing: if it would land on shapes or arrows, the server slides the whole
-  drawing as a unit to the nearest free space and reports "shifted" (positions in "created" are final).
-  The canvas is infinite, so never squeeze content into gaps between things.
+- Lay diagrams out in a grid so arrows run between neighbours without crossing other shapes.
+- Omit x and y unless the position matters: the server places content near the anchor (the "near" shape, or what
+  the user is looking at) without landing on shapes or arrows. The canvas is infinite, so never squeeze content into
+  gaps between things.
 - get_canvas returns every shape's bounds plus contentBounds, so you can plan where things go. Keep related things
   close, and do not move the user's shapes unless asked.
 `.trim()
@@ -115,7 +101,7 @@ const MAX_DOWNLOAD_BYTES = 100 * 1024 * 1024
 
 async function download(url: string): Promise<Buffer> {
 	if (!/^https?:/i.test(url)) throw new Error('Only http(s) URLs can be downloaded')
-	const res = await fetch(url, { signal: AbortSignal.timeout(60_000), headers: { 'User-Agent': 'Mozilla/5.0 duet-canvas' } })
+	const res = await fetch(url, { signal: AbortSignal.timeout(60_000), headers: { 'User-Agent': 'Mozilla/5.0 duet_canvas' } })
 	if (!res.ok) throw new Error(`Download failed: HTTP ${res.status}`)
 	const declared = Number(res.headers.get('content-length') ?? 0)
 	if (declared > MAX_DOWNLOAD_BYTES) throw new Error(`File is ${(declared / 1048576).toFixed(0)} MB, over the 100 MB limit`)
@@ -137,7 +123,7 @@ function intersects(
 
 // Stateless: a fresh server per request. All state lives in the room, not in MCP sessions.
 export function buildMcpServer(origin: string) {
-	const server = new McpServer({ name: 'duet-canvas', version: '0.4.0' }, { instructions: instructionsFor(origin) })
+	const server = new McpServer({ name: 'duet_canvas', version: '0.4.0' }, { instructions: instructionsFor(origin) })
 
 	server.registerTool(
 		'get_context',
@@ -174,7 +160,7 @@ export function buildMcpServer(origin: string) {
 		'get_canvas',
 		{
 			description:
-				'Read the shapes of ONE page (default: the page the user is on; pass pageId for another one): id, type, x, y, w, h, text, color, ' +
+				'Read the shapes of ONE page: id, type, x, y, w, h, text, color, ' +
 				'author (agent|user), kind, and arrow from/to. `pages` lists every page with its shape count. Image shapes are listed but not ' +
 				'shown; use view_image. contentBounds is the box around the shapes returned.',
 			inputSchema: { pageId: z.string().optional().describe('Page id like "page:page". Defaults to the page the user is on.') },
@@ -246,7 +232,7 @@ export function buildMcpServer(origin: string) {
 		{
 			description:
 				'Add a new page (tab) to the canvas, e.g. for a large diagram that would crowd the user\'s current page. ' +
-				'Then pass its id as pageId to create_shapes, add_text_block or add_media. This does not move the user to it: tell them it exists.',
+				'Then pass its id as pageId to create_shapes, add_text_block or add_media.',
 			inputSchema: { name: z.string().min(1).max(100) },
 		},
 		({ name }) => guard(() => createPage(name))
@@ -256,12 +242,10 @@ export function buildMcpServer(origin: string) {
 		'create_shapes',
 		{
 			description:
-				'Create diagram shapes (boxes, notes, arrows...). You never choose ids: the server makes them and returns them in `created`. ' +
-				'To join shapes made in this call, put an arrow in the same list with from/to set to the position of each shape in the list (0 = the first); ' +
-				'arrows then bind and follow the shapes. Omit x/y to auto-place in free space; if you give x/y for several shapes (a wireframe, a layout) they are treated as one drawing and slid together to free space if they would overlap anything, see `shifted` in the result. Geo shapes default to 160x100. ' +
-				'Shapes joined by arrows get extra room automatically. Arrow `route`: "straight" (default, tidy flows), "curve" (gentle arc, for maps and trees that fan out) or "elbow" (right angles, for loops). An arrow takes `text`: that is its label, drawn on the arrow, so never make a separate text shape for a label. ' +
-				'Read the returned warnings: they flag arrows that pass through other shapes or are too short to see. ' +
-				'Everything created is marked author "agent".',
+				'Create diagram shapes (boxes, notes, arrows...). The new ids come back in `created`. ' +
+				'Arrows bind to the shapes they join (see from/to) and follow them when moved. Omit x/y to auto-place in free space; if you give x/y for several shapes (a wireframe, a layout) they are treated as one drawing and slid together to free space if they would overlap anything, see `shifted` in the result. Geo shapes default to 160x100. ' +
+				'Shapes joined by arrows get extra room automatically. An arrow takes `text`: that is its label, drawn on the arrow, so never make a separate text shape for a label. ' +
+				'Read the returned warnings: they flag arrows that pass through other shapes or are too short to see.',
 			inputSchema: {
 				shapes: z.array(ShapeInput).min(1),
 				pageId: z.string().optional().describe('Defaults to the page the user is on'),
@@ -301,7 +285,7 @@ export function buildMcpServer(origin: string) {
 	server.registerTool(
 		'view_image',
 		{
-			description: 'See an image shape on the canvas (get_canvas only lists it). Returns the actual image.',
+			description: 'See an image shape on the canvas. Returns the actual image.',
 			inputSchema: { shapeId: z.string().describe('Id of an image shape, e.g. "shape:abc"') },
 		},
 		({ shapeId }) => {
@@ -356,17 +340,17 @@ export function buildMcpServer(origin: string) {
 				const sources = [path, url, base64].filter(Boolean).length
 				if (sources !== 1) throw new Error('Provide exactly one of `path`, `url` or `base64`')
 				let file: Buffer
-				let fallbackName = 'media'
+				let defaultName = 'media'
 				if (path) {
 					file = readFileSync(path)
-					fallbackName = basename(path)
+					defaultName = basename(path)
 				} else if (url) {
 					file = await download(url)
-					fallbackName = basename(new URL(url).pathname) || 'download'
+					defaultName = basename(new URL(url).pathname) || 'download'
 				} else {
 					file = Buffer.from(base64!, 'base64')
 				}
-				return json(addMedia({ file, name: name ?? fallbackName, ...rest }))
+				return json(addMedia({ file, name: name ?? defaultName, ...rest }))
 			} catch (e) {
 				return failure(e)
 			}

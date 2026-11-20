@@ -786,7 +786,7 @@ export function createShapes(requested: ShapeInput[], pageIdHint?: string) {
 			const y = Math.min(...drawn.map((r) => r.y))
 			const box = { x, y, w: Math.max(...drawn.map((r) => r.x + r.w)) - x, h: Math.max(...drawn.map((r) => r.y + r.h)) - y }
 			if (!isFree(obstacles, segments, box)) {
-				const spot = findFreeRect(obstacles, box.w, box.h, { prefer: [box], fallback: box, segments })
+				const spot = findFreeRect(obstacles, box.w, box.h, { prefer: [box], origin: box, segments })
 				dx = spot.x - x
 				dy = spot.y - y
 			}
@@ -808,7 +808,7 @@ export function createShapes(requested: ShapeInput[], pageIdHint?: string) {
 					const anchorRect = (nearShape && rectOf(nearShape)) ?? (parentId ? rects.get(parentId) : undefined)
 					const spot = findFreeRect(obstacles, w, h, {
 						prefer: anchorRect ? sidesOf(anchorRect, w, h, gap) : [],
-						fallback: viewportCorner(pageId),
+						origin: viewportCorner(pageId),
 						gap,
 						segments,
 					})
@@ -948,7 +948,7 @@ export function addTextBlock(opts: { text: string; near?: string; w?: number; x?
 		const anchorRect = anchor && rectOf(anchor)
 		const spot = findFreeRect(obstacles, w, h, {
 			prefer: anchorRect ? sidesOf(anchorRect, w, h, DIAGRAM_GAP) : [],
-			fallback: opts.x !== undefined && opts.y !== undefined ? { x: opts.x, y: opts.y } : viewportCorner(pageId),
+			origin: opts.x !== undefined && opts.y !== undefined ? { x: opts.x, y: opts.y } : viewportCorner(pageId),
 			segments: segmentsOn(all, pageId),
 		})
 		const c: Common = {
@@ -1030,21 +1030,6 @@ function markAnswered(txn: Txn, ann: TLShape, meta: Partial<BlockMeta>) {
 	if (!hasBadge) addBadge(txn, ann)
 }
 
-// Boards made before answered marks turned grey (same note at 55% opacity), or whose badge still types its ✓ as text.
-export function migrateAnsweredMarks() {
-	room.storage.transaction((txn) => {
-		for (const r of Array.from(txn.values())) {
-			if (!isShape(r)) continue
-			if (metaOf(r).kind === 'mark' && metaOf(r).status === 'answered' && r.opacity !== 1) markAnswered(txn, r, {})
-			if (metaOf(r).kind === 'answered-badge' && r.type === 'geo' && textOf(r) !== '') {
-				txn.delete(r.id)
-				const parent = txn.get(r.parentId as TLShape['id'])
-				if (parent && isShape(parent)) addBadge(txn, parent)
-			}
-		}
-	})
-}
-
 // The box around a marked selection turns violet (the agent's colour) and solid once the mark is answered.
 function markRegionAnswered(txn: Txn, ann: TLShape) {
 	const regionId = metaOf(ann).regionId
@@ -1071,7 +1056,7 @@ function replySpot(obstacles: Rect[], segments: Segment[], anchor: TLShape, mark
 	const underMark = sidesOf(rectOf(mark)!, w, h, DIAGRAM_GAP)[1]!
 	return (
 		freeRectNear(obstacles, segments, w, h, under, underMark, REPLY_REACH) ??
-		findFreeRect(obstacles, w, h, { prefer: [right, left, above], fallback: under, segments })
+		findFreeRect(obstacles, w, h, { prefer: [right, left, above], origin: under, segments })
 	)
 }
 
@@ -1277,7 +1262,7 @@ export function addMedia(opts: AddMediaOptions): AddedMedia {
 		if (opts.near && !anchor) throw new Error(`Unknown shape ${opts.near}`)
 		const spot = findFreeRect(obstacles, w, h + CAPTION_H, {
 			prefer: anchor ? sidesOf(rectOf(anchor)!, w, h + CAPTION_H) : [],
-			fallback: opts.x !== undefined && opts.y !== undefined ? { x: opts.x, y: opts.y } : viewportCorner(pageId),
+			origin: opts.x !== undefined && opts.y !== undefined ? { x: opts.x, y: opts.y } : viewportCorner(pageId),
 			segments: segmentsOn(all, pageId),
 		})
 
@@ -1331,30 +1316,4 @@ export function changesSince(sinceClock: number): CanvasChanges {
 		.map((s) => describeOne(s, records, byId, bindings))
 	const deleted = result.diff.deletes.filter((id) => id.startsWith('shape:'))
 	return { clock, reloadAll: result.wipeAll, changed, deleted }
-}
-
-// Boards made before arrows went behind blocks: move every arrow that sits above a block to below all of them.
-export function migrateArrowsBehind() {
-	room.storage.transaction((txn) => {
-		const all = Array.from(txn.values())
-		for (const page of all.filter(isPage)) {
-			const onPage = all.filter(isShape).filter((s) => s.parentId === page.id)
-			const lowestBlock = onPage.filter((s) => s.type !== 'arrow').map((s) => s.index).sort()[0]
-			if (!lowestBlock) continue
-			let low = arrowIndex(all, page.id)
-			for (const a of onPage.filter((s) => s.type === 'arrow' && s.index > lowestBlock).sort((x, y) => (x.index < y.index ? -1 : 1))) {
-				txn.set(a.id, { ...a, index: low })
-				low = getIndexBelow(low)
-			}
-		}
-	})
-}
-
-// Marks were called annotations before; rewrite stored shapes so existing boards keep working.
-export function migrateLegacyMarks() {
-	room.storage.transaction((txn) => {
-		for (const r of Array.from(txn.values())) {
-			if (isShape(r) && (r.meta as BlockMeta).kind === 'annotation') txn.set(r.id, { ...r, meta: { ...r.meta, kind: 'mark' } })
-		}
-	})
 }

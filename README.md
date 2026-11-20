@@ -1,4 +1,4 @@
-# duet-canvas
+# Duet Canvas
 
 A local tldraw canvas that you use in the browser **and** your coding agent edits over MCP.
 The server owns the canvas (SQLite), so the agent can read and edit it with the browser closed.
@@ -35,27 +35,27 @@ The web app has an **Agent chat** panel that drives your own agent CLI. The agen
 
 <p align="center"><img src="docs/chat.svg" width="560" alt="The browser talks to the server over a WebSocket guarded by the token cookie; the server drives the picked agent CLI over stdio (omp and pi with --mode rpc, claude -p with stream-json, codex app-server, opencode acp); the agent calls back into the server over MCP with only the canvas tools."></p>
 
-The chat socket is `/chat?token`. Claude Code runs one process per turn; pi speaks the same JSONL RPC as omp.
+Claude Code runs one process per turn; pi speaks the same JSONL RPC as omp.
 
 **Sign-in stays with each CLI.** This app never reads, stores or forwards their credentials: sign in yourself (`claude login`, `codex login`, `opencode auth login`, `pi auth login`) and the CLI uses its own. That is also what the vendors' terms require: Claude Code must run unmodified with the user's own login, and Codex's app-server sign-in is for local use only, never for a hosted service. Do not host this chat for other people.
 
 ### Run it with the CLI
 
 ```sh
-pnpm add -g .            # once, from this repo: puts `duet-canvas` on your PATH (pnpm 12 has no `link --global`)
-duet-canvas              # start in the foreground and print the unlock link
-duet-canvas start -d     # run in the background (log: <data dir>/duet-canvas.log)
-duet-canvas status | stop | url | token | rotate
-duet-canvas start --port 5859 --data-dir D:\canvas
+pnpm add -g .            # once, from this repo: puts `cduet` on your PATH (pnpm 12 has no `link --global`)
+cduet                    # start in the foreground and print the unlock link
+cduet start -d           # run in the background (log: <data dir>/duet_canvas.log)
+cduet status | stop | url | token | rotate
+cduet start --port 5859 --data-dir D:\canvas
 ```
 
-`start` builds `web/dist` if it is missing and prints a link ending in `?chat=<token>`. Open that link once (or paste it, or the bare `duet-canvas token`, into the locked chat panel) and the server gives the browser an HttpOnly cookie. Cookies ignore the port, so one unlock also covers the Vite dev server on the same host (`localhost` and `127.0.0.1` count as different hosts). Without it the chat shows "locked" and `/chat` refuses the socket. The token lives in `<data dir>/chat-token`.
+`start` builds `web/dist` if it is missing and prints a link ending in `?chat=<token>`. Open that link once (or paste it, or the bare `cduet token`, into the locked chat panel) and the server gives the browser an HttpOnly cookie. Cookies ignore the port, so one unlock also covers the Vite dev server on the same host (`localhost` and `127.0.0.1` count as different hosts). Without it the chat shows "locked" and `/chat` refuses the socket. The token lives in `<data dir>/chat-token`.
 
-**If the token or its link leaks** (a screenshot, a shared terminal or log), run `duet-canvas rotate`. It writes a new token; the running server reads the file on every check, so the old token stops working at once without a restart: old links, browsers' saved unlock and open chats are cut (the panel shows "locked" until you open the new link, which `duet-canvas url` prints again). Deleting `<data dir>/chat-token` by hand does the same. `start -d` keeps the token out of `duet-canvas.log` (run `duet-canvas url` for the link); entries from older versions are dead after a rotate.
+**If the token or its link leaks** (a screenshot, a shared terminal or log), run `cduet rotate`. It writes a new token; the running server reads the file on every check, so the old token stops working at once without a restart: old links, browsers' saved unlock and open chats are cut (the panel shows "locked" until you open the new link, which `cduet url` prints again). Deleting `<data dir>/chat-token` by hand does the same. `start -d` keeps the token out of `duet_canvas.log` (run `cduet url` for the link).
 
 ### What it does
 
-- **Docker has no chat.** A container cannot see your omp, so the button is hidden there (the image sets `CANVAS_DOCKER=1`). Docker stays the way to give MCP clients the canvas.
+- **Docker has no chat.** A container cannot see your agent CLIs, so the button is hidden there (the image sets `CANVAS_DOCKER=1`). Docker stays the way to give MCP clients the canvas.
 - **The chat agent only has the canvas tools, as far as each CLI allows.**
   - omp runs with `--no-tools`, `tools.xdev: false`, no extensions/skills/rules/context files, and `--yolo`: no bash, edit, eval or filesystem access. Servers from your own `~/.omp/agent/mcp.json` are switched off for the chat (a project-level `enabled: false` stub per name); a warning shows if any other tool still gets through.
   - Claude Code runs with `--tools ""`, only the canvas MCP server (`--strict-mcp-config`), no user settings, CLAUDE.md files or memory.
@@ -67,7 +67,7 @@ duet-canvas start --port 5859 --data-dir D:\canvas
 - **Images:** attach, paste or drop (PNG, JPEG, GIF, WebP, up to 6, shrunk to 2000px).
 - **Cost and context** of the current chat show under the box (spend, tokens in context; the bar turns amber, then red).
 - **Chats** are omp sessions in `<data dir>/sessions`; for the other agents the transcript is a JSON file there and the agent's own session is resumed. **History** lists the chats of the selected agent and reopens them; **New chat** starts a new session and keeps the old file. Long chats render the newest 30 messages and load more as you scroll up.
-- **Marks:** Ctrl+M marks the selection, Shift+M jumps to the next open mark, **Ask agent** (pill and context menu) prompts the agent, **Clear answered marks** tidies up.
+- **Marks:** Ctrl+M marks the selection, Shift+M jumps to the next open mark, the **Ask** badge on an open mark (or **Ask agent to answer this mark** in its context menu) prompts the agent, **Clear answered marks** tidies up.
 - The panel follows tldraw's light/dark/system theme.
 
 ## Connect your agent
@@ -77,7 +77,7 @@ duet-canvas start --port 5859 --data-dir D:\canvas
 ```json
 {
   "mcpServers": {
-    "duet-canvas": { "type": "http", "url": "http://127.0.0.1:5858/mcp", "enabled": true }
+    "duet_canvas": { "type": "http", "url": "http://127.0.0.1:5858/mcp", "enabled": true }
   }
 }
 ```
@@ -85,13 +85,13 @@ duet-canvas start --port 5859 --data-dir D:\canvas
 **Claude Code:**
 
 ```sh
-claude mcp add --transport http duet-canvas http://localhost:5858/mcp
+claude mcp add --transport http duet_canvas http://localhost:5858/mcp
 ```
 
 **Codex:**
 
 ```sh
-codex mcp add duet-canvas --url http://localhost:5858/mcp
+codex mcp add duet_canvas --url http://localhost:5858/mcp
 ```
 
 **OpenCode:** add this to `opencode.json` in your project (or your global OpenCode config):
@@ -99,7 +99,7 @@ codex mcp add duet-canvas --url http://localhost:5858/mcp
 ```json
 {
   "mcp": {
-    "duet-canvas": { "type": "remote", "url": "http://localhost:5858/mcp", "enabled": true }
+    "duet_canvas": { "type": "remote", "url": "http://localhost:5858/mcp", "enabled": true }
   }
 }
 ```
@@ -112,17 +112,17 @@ Tools: `get_context`, `get_canvas` (one page at a time), `get_changes`, `list_ma
 `add_media` takes PNG, JPEG, GIF, WebP, MP4 or WebM from a local `path`, a `url` (the server downloads it) or `base64`.
 Sample files to try it with are in `examples/media/`. Only images can be *viewed* by the agent (`view_image`).
 
-**Seeing the canvas:** the agent works from data only. `get_canvas` returns types, positions, sizes, text, colors and arrow bindings; there is no render or screenshot tool, so no browser tab is needed for the agent to work.
+**Seeing the canvas:** the agent works from data only. `get_canvas` returns types, positions, sizes, text, colors and arrow bindings, so no browser tab is needed for the agent to work.
 
 **Staying in sync:** every read is live, and every result ends with `canvas.clock` and `canvas.openMarks`. The agent
 passes its last clock to `get_changes` to see what the user added, edited, moved or deleted since.
-The server also sends usage instructions to the agent on connect (see `INSTRUCTIONS` in `server/src/mcp.ts`).
+The server also sends usage instructions to the agent on connect (see `instructionsFor` in `server/src/mcp.ts`).
 
 ## Talking to the agent: marks
 
 Pick the **Mark** tool in the toolbar (pin icon, key `m`) and click any shape, picture or agent block: a pink note opens
 attached to it with a dashed arrow. Click empty canvas for a free note. The agent reads open marks, answers with a violet
-block placed next to the mark, and marks it answered (dimmed). Editing an answered mark reopens it. The top-right pill
+block placed next to the mark, and marks it answered (it turns grey with a green ✓). Editing an answered mark reopens it. The top-right pill
 shows `N items · M open marks`.
 
 To mark several shapes at once, select them, right-click and choose **Mark selection**. A dashed pink box is drawn around the selection and one arrow joins the note to it. The box follows the shapes when you move them. When the agent answers, the box turns violet and the answer arrow points at it. `list_marks` returns the box as `selection` (x, y, w, h).
@@ -141,15 +141,15 @@ The shape is defined twice, in `server/src/mediaCard.ts` and `web/src/mediaCard.
 ## Data
 
 Your OS data dir, or `DATA_DIR` (`/data` in Docker): `canvas.db` (document), `ui-context.json` (last selection/viewport), `uploads/`, and for the chat `sessions/` and `workspace/`.
-The default is `%APPDATA%\duet-canvas` on Windows, `~/Library/Application Support/duet-canvas` on macOS and `$XDG_DATA_HOME` (or `~/.local/share`)`/duet-canvas` on Linux. Before the rename from canvas-idea the folder was called `canvas-idea`: if it exists and `duet-canvas` does not, it is still used. It used to be `.data/` next to where you ran the server: move it over to keep an old canvas.
+The default is `%APPDATA%\duet-canvas` on Windows, `~/Library/Application Support/duet-canvas` on macOS and `$XDG_DATA_HOME` (or `~/.local/share`)`/duet-canvas` on Linux.
 
 ## Security
 
 Binds to 127.0.0.1 and rejects unknown `Host` headers and cross-origin requests. Extra hosts: `ALLOWED_HOSTS=a.local,b.local`.
 
 - **The MCP endpoint (`/mcp`) and the canvas have no auth.** Anyone who can reach the port can read and edit the canvas. Do not expose it beyond localhost without putting authentication in front of it (the Docker compose file publishes the port on loopback only).
-- **The chat is protected by a token** (see above), because it drives an agent on your machine. Never share the unlock link; run `duet-canvas rotate` if it leaks.
-- The chat agent runs with `--yolo` but only has the canvas tools. Your own omp MCP servers are switched off for it.
+- **The chat is protected by a token** (see above), because it drives an agent on your machine. Never share the unlock link; run `cduet rotate` if it leaks.
+- The chat agent is limited to the canvas tools as far as each CLI allows; see **What it does** above (Codex keeps its read-only shell).
 
 ## Development
 
@@ -159,10 +159,10 @@ pnpm --filter server test      # server unit tests
 pnpm --filter web build        # rebuild web/dist (the server serves the built files)
 ```
 
-`server/` is the Hono + MCP + tldraw sync server, `web/` is the Vite/React app, `bin/` is the `duet-canvas` CLI.
+`server/` is the Hono + MCP + tldraw sync server, `web/` is the Vite/React app, `bin/` is the `cduet` CLI.
 
 ## License
 
-duet-canvas is [MIT](LICENSE).
+Duet Canvas is [MIT](LICENSE).
 
 [tldraw](https://tldraw.dev), which it is built on, is not open source and has its own license. Its SDK needs a license for production use; without a key it shows a "Made with tldraw" watermark. See the [tldraw license](https://github.com/tldraw/tldraw/blob/main/LICENSE.md) before you deploy this or build on it. This repo does not include a tldraw license key.

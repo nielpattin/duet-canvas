@@ -38,7 +38,7 @@ function webmSize(b: Buffer): { w: number; h: number } | null {
 }
 
 // Reads type and pixel size straight from the file header, so we need no media library.
-// Videos whose size cannot be read come back as 0x0; the caller decides on a fallback.
+// Videos whose size cannot be read come back as 0x0; the caller picks a size.
 export function sniffMedia(b: Buffer): MediaInfo | null {
 	if (b.length > 24 && b.readUInt32BE(0) === 0x89504e47) return img('image/png', b.readUInt32BE(16), b.readUInt32BE(20))
 	if (b.length > 10 && b.toString('ascii', 0, 3) === 'GIF') return img('image/gif', b.readUInt16LE(6), b.readUInt16LE(8), true)

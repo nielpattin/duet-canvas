@@ -74,8 +74,6 @@ type ServerMessage =
 	| { t: 'error'; message: string }
 
 const OPEN_KEY = 'canvas.chat.open'
-// Older builds kept the token here; it is handed to the server once and dropped.
-const LEGACY_TOKEN_KEY = 'canvas.chat.token'
 
 // Trades an unlock code for the server's HttpOnly cookie, so page scripts never hold the token.
 const unlock = async (token: string) =>
@@ -89,9 +87,7 @@ function takeLinkToken() {
 		url.searchParams.delete('chat')
 		history.replaceState(null, '', url)
 	}
-	const legacy = localStorage.getItem(LEGACY_TOKEN_KEY)
-	localStorage.removeItem(LEGACY_TOKEN_KEY)
-	return fromLink ?? legacy
+	return fromLink
 }
 
 let state: ChatState = {

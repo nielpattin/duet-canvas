@@ -1,10 +1,10 @@
 {
-  "name": "duet-canvas",
+  "name": "duet_canvas",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "bin": {
-    "duet-canvas": "bin/duet-canvas.mjs"
+    "cduet": "bin/cduet.mjs"
   },
   "scripts": {
     "dev": "pnpm -r --parallel dev",

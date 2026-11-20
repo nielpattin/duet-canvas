@@ -1,4 +1,3 @@
-import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 
@@ -13,7 +12,5 @@ export function resolveDataDir(): string {
 			: process.platform === 'darwin'
 				? join(home, 'Library', 'Application Support')
 				: (process.env.XDG_DATA_HOME ?? join(home, '.local', 'share'))
-	// Before the rename to duet-canvas the folder was canvas-idea: keep using it so an existing canvas is not orphaned.
-	const legacy = join(base, 'canvas-idea')
-	return existsSync(legacy) && !existsSync(join(base, 'duet-canvas')) ? legacy : join(base, 'duet-canvas')
+	return join(base, 'duet-canvas')
 }
